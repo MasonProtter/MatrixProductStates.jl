@@ -5,7 +5,8 @@ algorithm over matrix product states as explained in Schollwöck's [[https://www
 density-matrix renormalization group in the age of matrix product
 states]]. This same project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
 
-@@html:<details><summary>@@CLICK ME@@html:</summary>@@
+@@html:<details><summary>@@ CLICK ME 
+@@html:</summary>@@
 @@html:<p>@@
 *** yes, even hidden code blocks!
 
