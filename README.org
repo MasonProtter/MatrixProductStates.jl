@@ -195,6 +195,9 @@ end
 #+HTML: </p>
 #+HTML: </details>
 
+#+HTML: </p>
+#+HTML: </details>
+
 *** Matrix Product Operators
 #+HTML: <details><summary>Source</summary>
 #+HTML: <p>
