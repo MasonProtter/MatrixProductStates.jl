@@ -13,6 +13,6 @@ states]]. This same project has been undertaken in [[https://github.com/0/Lattic
 #+BEGIN_SRC jupyter-julia
 using Statistics: std
 minimum(Es), maximum(Es), std(Es)
-
+#+END_SRC
 </p>
 </details>  
