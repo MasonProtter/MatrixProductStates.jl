@@ -1,5 +1,7 @@
  <details open>
 <summary>Already open...</summary>
-
-<p>stuff</p>
+stuff
+<p></p>
 </details>  
+
+more stuff
