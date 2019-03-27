@@ -4,15 +4,3 @@ This is a package-in-progress in which I intend to implement a [[https://en.wiki
 algorithm over matrix product states as explained in Schollwöck's [[https://www.sciencedirect.com/science/article/pii/S0003491610001752][The
 density-matrix renormalization group in the age of matrix product
 states]]. This same project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
-
-<details><summary>CLICK ME</summary>
-<p>
-
-#### yes, even hidden code blocks!
-
-```python
-print("hello world!")
-```
-
-</p>
-</details>
