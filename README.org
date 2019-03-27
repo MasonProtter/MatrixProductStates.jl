@@ -31,6 +31,34 @@ struct MPS{L, T<:Number}
     tensors::Vector{Array{T,3}}
 end
 
+Base.isequal(ψ::MPS, ϕ::MPS)     = (isequal(ψ.tensors, ϕ.tensors))
+Base.isapprox(ψ::MPS, ϕ::MPS)   = isapprox(ψ.tensors, ϕ.tensors)
+
+Base.eltype(::Type{MPS{L, T}}) where {L, T} = T
+
+Base.length(::MPS{L, T}) where {L, T} = L
+
+Base.size(::MPS{L, T}) where {L, T} = (L,)
+Base.getindex(ψ::MPS, i::Int) = getindex(ψ.tensors, i)
+
+Base.:(*)(ψ::MPS{L, T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors .* x)
+Base.:(*)(x::Number, ψ::MPS) = ψ * x
+Base.:(/)(ψ::MPS{L,T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors ./ x)
+
+function Base.randn(::Type{MPS{L, T}}, D::Int, d::Int) where {L, T}
+    tensors = [randn(1, D, d), [randn(D, D, d) for _ in 2:(L-1)]..., randn(D, 1, d)]
+    MPS{L, T}(tensors)
+end
+
+
+#+END_SRC
+
+
+#+HTML: <details><summary>Constructors and such </summary>
+#+HTML: <p>
+
+#+BEGIN_SRC julia :comments both :tangle src/MPS.jl
+
 
 """
     MPS(vs::Vector{Vector})
@@ -54,10 +82,6 @@ Create an `MPS` for `L` sites representing a uniform product state (all bonds
 have dimension 1), where each site is described by `v`.
 """
 MPS(v::Vector, L) = MPS([v for _ in 1:L])
-
-Base.isequal(ψ::MPS, ϕ::MPS)     = (isequal(ψ.tensors, ϕ.tensors))
-Base.:(==)(ψ::MPS, ϕ::MPS)       = (ψ.tensors == ϕ.tensors)
-Base.:isapprox(ψ::MPS, ϕ::MPS)   = isapprox(ψ.tensors, ϕ.tensors)
 
 function Base.show(io::IO, ::MIME"text/plain", ψ::MPS{L, T}) where {L, T}
     d = length(ψ.tensors[2][1, 1, :])
@@ -84,23 +108,6 @@ end
 
 function Base.show(io::IO, ψ::MPS{L, T}) where {L, T}
     print(io, "MPO on $L sites")
-end
-
-Base.eltype(::Type{MPS{L, T}}) where {L, T} = T
-
-Base.length(::MPS{L, T}) where {L, T} = L
-
-Base.size(::MPS{L, T}) where {L, T} = (L,)
-Base.getindex(ψ::MPS, i::Int) = getindex(ψ.tensors, i)
-
-Base.:(*)(ψ::MPS{L, T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors .* x)
-Base.:(*)(x::Number, ψ::MPS) = ψ * x
-Base.:(/)(ψ::MPS{L,T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors ./ x)
-
-function Base.randn(::Type{MPS{L, T}}, D::Int, d::Int) where {L, T}
-    MPS{L, T}([randn(1, D, d), 
-               [randn(D, D, d) for _ in 2:(L-1)]...,
-               randn(D, 1, d)])
 end
 
 #+END_SRC
@@ -140,6 +147,9 @@ end
 
 adjoint_tensors(ψ::MPS) = reverse(conj.(permutedims.(ψ.tensors, [(2, 1, 3)])))
 #+END_SRC
+
+#+HTML: </p>
+#+HTML: </details>
 
 #+HTML: </p>
 #+HTML: </details>
