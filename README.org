@@ -5,15 +5,13 @@ algorithm over matrix product states as explained in Schollwöck's [[https://www
 density-matrix renormalization group in the age of matrix product
 states]]. This same project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
 
-@@html:<details><summary>@@ CLICK ME 
-@@html:</summary>@@
-@@html:<p>@@
-*** yes, even hidden code blocks!
+@@html:<b>@@bold text@@html:</b>@@
 
-#+BEGIN_SRC jupyter-julia
-ϕ = MPS(spin_up, L) |> rightcanonical |> leftcanonical
-ϕ' * (H * ϕ)
-#+END_SRC
+#+BEGIN_EXPORT html
+<details><summary>CLICK ME</summary>
+<p>
+yes, even hidden code blocks!
 
-@@html:</p>@@
-@@html:</details>@@
+</p>
+</details>
+#+END_EXPORT
