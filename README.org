@@ -763,9 +763,8 @@ end
 #+HTML: </p>
 
 
-#+HTML: <details><summary>
 ** Tests
-#+HTML: </summary>
+#+HTML:  <details><summary>Source</summary>
 #+HTML: <p>
 #+BEGIN_SRC julia :comments both :tangle test/runtests.jl
 using Test, MatrixProductStates
