@@ -499,7 +499,7 @@ compress(ψ; Dcut) = compress(ψ, left, Dcut=Dcut)[1]
 
 #+END_SRC 
 #+HTML: </p>
-#+HTML: </
+#+HTML: </details>
 
 *** Imaginary Time Evolution
 #+HTML: <details><summary>Source</summary>
