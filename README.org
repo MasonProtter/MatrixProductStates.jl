@@ -19,10 +19,11 @@ module MatrixProductStates
 
 using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack
 
-export *, /, ==, ≈, isequal, adjoint, getindex, randn, ⊗
+export *, /, ==, ≈, isequal, adjoint, getindex, randn
 export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
-export ground_state, realize
+export ground_state
 
+include("utils.jl")
 include("MPS.jl")
 include("MPO.jl")
 include("compression.jl")
@@ -30,9 +31,28 @@ include("contraction.jl")
 include("timeevolution.jl")
 include("groundstate.jl")
 
+end
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
+*** Utils
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/utils.jl
+export ⊗, realize
+
 A ⊗ B = kron(A, B)
 
+realize(x::Number) = error("Unrecognized numerical type")
+realize(x::Real) = x
+function realize(x::Complex; ϵ=1e-13)
+    abs(imag(x)) < ϵ || error("Non-zero imaginary component")
+    real(x)
 end
+
+dg(M::Array{T, 4}) where {T} = permutedims(conj.(M), (2, 1, 3, 4))
+dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
+
 #+END_SRC
 #+HTML: </details>
 #+HTML: </p>
@@ -189,13 +209,9 @@ adjoint_tensors(ψ::MPS) = reverse(conj.(permutedims.(ψ.tensors, [(2, 1, 3)])))
 #+HTML: </p>
 #+HTML: </details>
 
-
-
 #+HTML: <details><summary>MPS Contraction</summary>
 #+HTML: <p>
 #+BEGIN_SRC julia :comments both :tangle src/contraction.jl
-
-dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
 
 """
     Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
@@ -372,6 +388,33 @@ function Base.:(*)(O1::MPO{L, T}, O2::MPO{L, T}) where {L, T}
         push!(tensors, V)
     end
     MPO{L, T}(tensors)
+end
+
+"""
+    Base.:(*)(ψ::Adjoint{T,MPS{L,T}}, O::MPO) where {L,T}
+representing
+
+    •--(a¹ a¹)--•--(a² a²)--•--(a³ a³)--•       
+    |           |           |           | 
+    σ′¹         σ′²         σ′³         σ′⁴
+    σ′¹         σ′²         σ′³         σ′⁴
+    |           |           |           | 
+    •--(b¹ b¹)--•--(b² b²)--•--(b³ b³)--•
+    |           |           |           | 
+    σ¹          σ²          σ³          σ⁴ 
+"""
+function Base.:(*)(ψ′::Adjoint{T,MPS{L,T}}, O::MPO{L, T}) where {L,T}
+    ψ = ψ′.parent
+    tensors = Array{T,3}[]
+    Ws = dg.(reverse(O.tensors))
+    for i in 1:L
+        W = Ws[i]
+        M = ψ.tensors[i]
+
+        @reduce N[(bᵢ₋₁, aᵢ₋₁), (bᵢ, aᵢ), σᵢ] :=  sum(σ′ᵢ) W[bᵢ₋₁, bᵢ, σᵢ, σ′ᵢ] * M[aᵢ₋₁, aᵢ, σ′ᵢ]
+        push!(tensors, N)
+    end
+    adjoint(MPS{L, T}(tensors))
 end
 #+END_SRC 
 #+HTML: </p>
@@ -715,20 +758,15 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}, Dcut) where {L, T}
     ψ, E₀′
 end
 
-realize(x::Number) = error("Unrecognized numerical type")
-realize(x::Real) = x
-function realize(x::Complex)
-    abs(imag(x)) < 1e-13 || error("Non-zero imaginary component")
-    real(x)
-end
-
 #+END_SRC
 #+HTML: </details>
 #+HTML: </p>
-*** Tests
-#+HTML: <details><summary>Source</summary>
+
+#+HTML: <details><summary>
+** Tests
+#+HTML:</summary>
 #+HTML: <p>
-#+BEGIN_SRC julia
+#+BEGIN_SRC julia :comments both :tangle test/runtests.jl
 using Test, MatrixProductStates
 
 @testset "TFIM" begin
@@ -747,7 +785,11 @@ using Test, MatrixProductStates
     H = MPO(H_tnsr, L)
 
     ψ = randn(MPS{L, Float64}, 100, 2)
-    ψ̃ = compress(ψ, Left(), Dcut=80)[1]
+
+    @test (ψ' * H) * ψ ≈ ψ' * (H * ψ)
+    
+    ψ̃ = compress(ψ, left, Dcut=80)[1] # Note: no actual information is lost in this 
+                                        # compression because of the small size of the chain
 
     @test              ψ̃'ψ̃ ≈ 1
     @test          ψ'ψ/ψ'ψ ≈ ψ̃'ψ̃
