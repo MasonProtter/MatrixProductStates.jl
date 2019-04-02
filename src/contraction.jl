@@ -1,7 +1,53 @@
 
-#---------------------------------------------------------------------
-# MPO and MPS Contraction
 
+# #+HTML: </p>
+# #+HTML: </details>
+
+
+
+# #+HTML: <details><summary>MPS Contraction</summary>
+# #+HTML: <p>
+
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:4]]
+dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
+
+"""
+    Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
+representing
+    •--(b¹ b¹)--•--(b² b²)--•--(b³ b³)--•       
+    |           |           |           | 
+    σ′¹         σ′²         σ′³         σ′⁴
+    σ′¹         σ′²         σ′³         σ′⁴
+    |           |           |           | 
+    •--(a¹ a¹)--•--(a² a²)--•--(a³ a³)--•
+"""
+function Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
+    ψ = ψ′.parent
+
+    M   = ϕ.tensors[1]
+    M̃dg = dg(ψ.tensors[1])
+    
+    @tensor cont[b₁, a₁] := M̃dg[b₁, 1, σ₁] * M[1, a₁, σ₁]
+    
+    for i in 2:L-1
+        M   = ϕ.tensors[i]
+        M̃dg = dg(ψ.tensors[i])
+
+        @tensor cont[bᵢ, aᵢ] := M̃dg[bᵢ, bᵢ₋₁, σᵢ] * cont[bᵢ₋₁, aᵢ₋₁] * M[aᵢ₋₁, aᵢ, σᵢ]
+    end
+    M   = ϕ.tensors[L]
+    M̃dg = dg(ψ.tensors[L])
+    
+    @tensor M̃dg[1, bᴸ⁻¹, σᴸ] * cont[bᴸ⁻¹, aᴸ⁻¹] * M[aᴸ⁻¹, 1, σᴸ]
+end
+# Matrix Product States:4 ends here
+
+ 
+
+# #+HTML: <details><summary>MPO Contraction</summary>
+# #+HTML: <p>
+
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20Operators][Matrix Product Operators:2]]
 """
     Base.:(*)(O::MPO, ψ::MPS)
 representing
@@ -56,38 +102,4 @@ function Base.:(*)(O1::MPO{L, T}, O2::MPO{L, T}) where {L, T}
     end
     MPO{L, T}(tensors)
 end
-
-"""
-    Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
-representing
-    •--(b¹ b¹)--•--(b² b²)--•--(b³ b³)--•       
-    |           |           |           | 
-    σ′¹         σ′²         σ′³         σ′⁴
-    σ′¹         σ′²         σ′³         σ′⁴
-    |           |           |           | 
-    •--(a¹ a¹)--•--(a² a²)--•--(a³ a³)--•
-"""
-function Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
-    ψ = ψ′.parent
-
-    M   = ϕ.tensors[1]
-    M̃dg = dg(ψ.tensors[1])
-    
-    @tensor cont[b₁, a₁] := M̃dg[b₁, 1, σ₁] * M[1, a₁, σ₁]
-    
-    for i in 2:L-1
-        M   = ϕ.tensors[i]
-        M̃dg = dg(ψ.tensors[i])
-
-        @tensor cont[bᵢ, aᵢ] := M̃dg[bᵢ, bᵢ₋₁, σᵢ] * cont[bᵢ₋₁, aᵢ₋₁] * M[aᵢ₋₁, aᵢ, σᵢ]
-    end
-    M   = ϕ.tensors[L]
-    M̃dg = dg(ψ.tensors[L])
-    
-    @tensor M̃dg[1, bᴸ⁻¹, σᴸ] * cont[bᴸ⁻¹, aᴸ⁻¹] * M[aᴸ⁻¹, 1, σᴸ]
-end
-
-
-dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
-
-
+# Matrix Product Operators:2 ends here

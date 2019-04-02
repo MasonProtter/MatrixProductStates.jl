@@ -1,6 +1,8 @@
+# Matrix Product Operators
+# #+HTML: <details><summary>Source</summary>
+# #+HTML: <p>
 
-#---------------------------------------------------------------------
-# Matrix Product Operators 
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20Operators][Matrix Product Operators:1]]
 """
     MPO{L, T<:Number}
 
@@ -63,17 +65,17 @@ function MPO(W::Array{T,4}, L) where {T}
     L >= 2 || throw(DomainError(L, "At least 2 sites."))
 
     tensors = Vector{Array{T,4}}(undef, L)
-    # Row vector.
-    tensors[1] = W[end:end, :, :, :] #permutedims(x[end:end, :, :, :], (1, 3, 4, 2))
+    
+    tensors[1] = W[end:end, :, :, :] # Row vector.
     for i in 2:(L-1)
-        # Matrix.
-        tensors[i] = W #permutedims(x, (1, 3, 4, 2))
+        tensors[i] = W # Matrix
     end
-    # Column vector.
-    tensors[L] = W[:, 1:1, :, :] #permutedims(x[:, 1:1, :, :], (1, 3, 4, 2))
+    tensors[L] = W[:, 1:1, :, :] # Column vector.
 
     MPO{L,T}(tensors)
 end
 
 Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
-Base.:(≈)(O::MPO, U::MPO) = O.tensors ≈ U.tensors
+Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
+Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
+# Matrix Product Operators:1 ends here

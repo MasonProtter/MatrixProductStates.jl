@@ -1,29 +1,24 @@
-# [[file:~/.julia/dev/MatrixProductStates/README.org::*Source%20Code][Source Code:1]]
+# Module Definition
+# #+HTML: <details><summary>Source</summary>
+# #+HTML: <p>
+
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Module%20Definition][Module Definition:1]]
 module MatrixProductStates
 
-using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox
+using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack
 
-export *, /, ==, ≈, isequal, adjoint, getindex, randn
-export MPS, MPO, Left, Right, compress
+export *, /, ==, ≈, isequal, adjoint, getindex, randn, ⊗
+export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
+export ground_state, realize
 
 include("MPS.jl")
 include("MPO.jl")
+include("compression.jl")
 include("contraction.jl")
 include("timeevolution.jl")
-include("compression.jl")
-# #---------------------------------------------------------------------
-# # DMRG Algorithm
+include("groundstate.jl")
 
-# function DMRG(ψ::MPS, H::MPO)
-#     ψ = ψguess
-#     converged = false
-    
-#     while !(converged)
-#         right_sweep!(ψ)
-#         left_sweep!(ψ)
-#         converged = check_convergance(ψ)
-#     end
-# end
+A ⊗ B = kron(A, B)
 
 end
-# Source Code:1 ends here
+# Module Definition:1 ends here

@@ -1,32 +1,58 @@
+# Imaginary Time Evolution
+# #+HTML: <details><summary>Source</summary>
+# #+HTML: <p>
+
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Imaginary%20Time%20Evolution][Imaginary Time Evolution:1]]
 #---------------------------------------------------------------------
 # Imaginary Time Evolution Assuming only nearest neighbor interactions
 
 """
      MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
 """
-function MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
+function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     tensors = Array{T, 4}[]
+    for h in hs
+        O = exp(-τ*h)
+        @cast P[(σⁱ, σⁱ′), (σⁱ⁺¹, σⁱ⁺¹′)] |= O[(σⁱ, σⁱ⁺¹), (σⁱ′, σⁱ⁺¹′)] (σⁱ:d, σⁱ′:d)
+        U, S, V = svd(P)
 
-
-    if iseven(L)
+        @cast U[1, k, σⁱ, σⁱ′]     := U[(σⁱ, σⁱ′), k] * √(S[k])      (σⁱ:d)
+        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
+        push!(tensors, U, Ū)
     end
+    MPO{L, T}(tensors)
 end
+
+
+"""
+
+"""
+function MPO_time_evolvers(h1::Matrix, hi::Matrix, hL::Matrix, τ, L, d)
+    if iseven(L)
+        odd_hs  = [h1, [hi for _ in 3:2:(L-1)]...]
+        even_hs = [[hi for i in 2:2:(L-1)]..., hL]
+    else
+        odd_hs  = [h1, [hi for _ in 3:2:(L-1)]..., hL]
+        even_hs = [hi for i in 2:2:(L-1)]
+    end
     
-"""
-    MPO_even_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-"""
-function MPO_even_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-    tensors = Array{T, 4}[]
+    Uodd  = _MPO_handed_time_evolver(odd_hs, τ, L, d)
+    Ueven = _MPO_handed_time_evolver(even_hs, τ, L, d)
+    Uodd, Ueven
+end
 
-    if iseven(L)
+function imag_time_evolution(ψ::MPS{L, T}, h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, 
+                             β, N, Dcut) where {L, T}
+    τ = β/N
+    d = length(ψ[1][1, 1, :])
+    ϕ = ψ  # Ground state guess
+    dir = left
+    Uodd, Ueven = MPO_time_evolvers(h1, hi, hL, τ, L, d)
+    for _ in 1:N
+        ϕ1, dir = compress(Uodd  * ϕ,  dir, Dcut=Dcut)
+        ϕ,  dir = compress(Ueven * ϕ1, dir, Dcut=Dcut)
+        #ϕ,  dir = compress(Uodd  * ϕ2, dir, Dcut=Dcut)
     end
+    ϕ
 end
-
-"""
-    MPO_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-"""
-function MPO_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-    Uoddhalf = MPO_odd_time_evolver(h1, hi, hL, τ/2, L)
-    Ueven    = MPO_even_time_evolver(h1, hi, hL, τ, L)
-    compress(Uoddhalf * Ueven * Uoddhalf)
-end
+# Imaginary Time Evolution:1 ends here

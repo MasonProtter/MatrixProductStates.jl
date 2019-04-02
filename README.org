@@ -5,9 +5,113 @@ algorithm over matrix product states as explained in Schollwöck's [[https://www
 density-matrix renormalization group in the age of matrix product
 states]]. This same project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
 
+The code in this repo is currently under development. Many things
+do not work and even fewer things are tested. 
+
+** Example: Transverse Field Ising Model
+#+BEGIN_SRC jupyter-julia
+using MatrixProductStates, LinearAlgebra
+
+g = 3.0; L = 20
+
+id = [1.0 0.0; 0.0 1.0]
+σˣ = [0.0 1.0; 1.0 0.0]
+σᶻ = [1.0 0.0; 0.0 -1.0]
+
+H_tnsr = zeros(3, 3, 2, 2)
+H_tnsr[1, 1, :, :] = id
+H_tnsr[2, 1, :, :] = -σᶻ
+H_tnsr[3, 1, :, :] = -g*σˣ
+H_tnsr[3, 2, :, :] = σᶻ
+H_tnsr[3, 3, :, :] = id
+H = MPO(H_tnsr, L);
+#+END_SRC
+
+#+RESULTS:
+
+Initialize a random, left canonical state
+#+BEGIN_SRC jupyter-julia
+ψ = randn(MPS{L, Float64}, 1000, 2) |> leftcanonical |> rightcanonical
+#+END_SRC
+
+#+RESULTS:
+: Matrix product state on 20 sites
+:   Physical dimension: 2
+:   Bond dimensions:   (1, 2) × (2, 4) × (4, 8) × (8, 16) × (16, 32) × (32, 64) × (64, 128) × (128, 256) ×  ... × (2, 1)
+
+#+BEGIN_SRC jupyter-julia
+ψ'ψ
+#+END_SRC
+
+#+RESULTS:
+: 1.0000000000000009
+
+Energy of this states:
+
+#+BEGIN_SRC jupyter-julia
+ψ' * (H * ψ)
+#+END_SRC
+
+#+RESULTS:
+: -0.11468470348987525
+
+Compression: 
+#+BEGIN_SRC jupyter-julia
+ψ̃ = compress(ψ, right, Dcut=700)[1]
+#+END_SRC
+
+#+RESULTS:
+: Matrix product state on 20 sites
+:   Physical dimension: 2
+:   Bond dimensions:   (1, 2) × (2, 4) × (4, 8) × (8, 16) × (16, 32) × (32, 64) × (64, 128) × (128, 256) ×  ... × (2, 1)
+
+#+BEGIN_SRC jupyter-julia
+ψ̃' * (H * ψ̃)
+#+END_SRC
+
+#+RESULTS:
+: -0.11345449725692047
+
+Over-compression: 
+#+BEGIN_SRC jupyter-julia
+ψ̃ = compress(ψ, right, Dcut=100)[1]
+ψ̃' * (H * ψ̃)
+#+END_SRC
+
+#+RESULTS:
+: -0.2529715389842077
+
+
 ** Source Code
+This readme is a literal document containing all of the source and
+test code for the package.
+*** Module Definition
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/MatrixProductStates.jl
+module MatrixProductStates
+
+using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack
+
+export *, /, ==, ≈, isequal, adjoint, getindex, randn, ⊗
+export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
+export ground_state, realize
+
+include("MPS.jl")
+include("MPO.jl")
+include("compression.jl")
+include("contraction.jl")
+include("timeevolution.jl")
+include("groundstate.jl")
+
+A ⊗ B = kron(A, B)
+
+end
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
 *** Matrix Product States
-#+HTML: <details><summary>Basics</summary>
+#+HTML: <details><summary>Source</summary>
 #+HTML: <p>
 #+BEGIN_SRC julia :comments both :tangle src/MPS.jl
 #---------------------------------------------------------------------
@@ -45,12 +149,12 @@ Base.getindex(ψ::MPS, i::Int) = getindex(ψ.tensors, i)
 Base.:(*)(ψ::MPS{L, T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors .* x)
 Base.:(*)(x::Number, ψ::MPS) = ψ * x
 Base.:(/)(ψ::MPS{L,T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors ./ x)
+Base.copy(ψ::MPS{L, T}) where {L, T} = MPS{L,T}(copy(ψ.tensors))
 
 function Base.randn(::Type{MPS{L, T}}, D::Int, d::Int) where {L, T}
     tensors = [randn(1, D, d), [randn(D, D, d) for _ in 2:(L-1)]..., randn(D, 1, d)]
-    MPS{L, T}(tensors)
+    MPS{L, T}(tensors) |> leftcanonical |> rightcanonical
 end
-
 
 #+END_SRC
 
@@ -89,6 +193,13 @@ function Base.show(io::IO, ::MIME"text/plain", ψ::MPS{L, T}) where {L, T}
     bonddims = [size(ψ[i][:, :, 1]) for i in 1:L]
     println(io, "Matrix product state on $L sites")
     _show_mps_dims(io, L, d, bonddims)
+end
+
+function Base.show(ψ::MPS{L, T}) where {L, T}
+    d = length(ψ.tensors[2][1, 1, :])
+    bonddims = [size(ψ[i][:, :, 1]) for i in 1:L]
+    println("Matrix product state on $L sites")
+    _show_mps_dims(L, d, bonddims)
 end
 
 function _show_mps_dims(io::IO, L, d, bonddims)
@@ -276,6 +387,7 @@ end
 
 Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
 Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
+Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
 #+END_SRC 
 
 #+HTML: <details><summary>MPO Contraction</summary>
@@ -360,16 +472,21 @@ function compress(ψ::MPS{L, T}, to_the::Right; Dcut::Int=typemax(Int)) where {L
     
     @cast Bm[(σ¹, a⁰), a¹] |= B[a⁰, a¹, σ¹]
     U, S, V = psvd(Bm, rank=Dcut)
+    #S = S/√sum(S .^ 2)
+
     @cast A[a⁰, a¹, σ¹] |= U[(σ¹, a⁰), a¹] (σ¹:d)
     push!(tensors, A)
     
     for i ∈ 2:L
         B = ψ[i]
         d = length(B[1, 1, :])
+
         @tensor M[aⁱ⁻¹, aⁱ, σⁱ]    := (Diagonal(S)*V')[aⁱ⁻¹, aⁱ⁻¹′] * B[aⁱ⁻¹′, aⁱ, σⁱ]
+
         @cast   Mm[(σⁱ, aⁱ⁻¹), aⁱ] |= M[aⁱ⁻¹, aⁱ, σⁱ]
         
         U, S, V = psvd(Mm, rank=Dcut)
+        #S = S/√sum(S .^ 2)
 
         @cast A[aⁱ⁻¹, aⁱ, σⁱ] |= U[(σⁱ, aⁱ⁻¹), aⁱ] (σⁱ:d)
         push!(tensors, A)
@@ -387,7 +504,8 @@ function compress(ψ::MPS{L, T}, to_the::Left; Dcut::Int=typemax(Int)) where {L,
     @cast Am[aᴸ⁻¹, (σᴸ, aᴸ)] |= A[aᴸ⁻¹, aᴸ, σᴸ]
     
     U, S, V = psvd(Am, rank=Dcut)
-    
+    #S = S/√sum(S .^ 2)    
+
     @cast B[aᴸ⁻¹, aᴸ, σᴸ] |= V'[aᴸ⁻¹, (σᴸ, aᴸ)] (σᴸ:d)
     push!(tensors, B)
     
@@ -398,7 +516,8 @@ function compress(ψ::MPS{L, T}, to_the::Left; Dcut::Int=typemax(Int)) where {L,
         @cast   Mm[aⁱ⁻¹, (σⁱ, aⁱ)] |= M[aⁱ⁻¹, aⁱ, σⁱ]
         
         U, S, V = psvd(Mm, rank=Dcut)
-        
+        #S = S/√sum(S .^ 2)
+
         @cast B[aⁱ⁻¹, aⁱ, σⁱ] |= V'[aⁱ⁻¹, (σⁱ, aⁱ)] (σⁱ:d)
         push!(tensors, B)
     end
@@ -406,6 +525,310 @@ function compress(ψ::MPS{L, T}, to_the::Left; Dcut::Int=typemax(Int)) where {L,
 end
 
 rightcanonical(ψ) = compress(ψ, left)[1]
+
+compress(ψ; Dcut) = compress(ψ, left, Dcut=Dcut)[1]
+
 #+END_SRC 
 #+HTML: </p>
+#+HTML: </
+
+*** Imaginary Time Evolution
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/timeevolution.jl
+#---------------------------------------------------------------------
+# Imaginary Time Evolution Assuming only nearest neighbor interactions
+
+"""
+     MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
+"""
+function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
+    tensors = Array{T, 4}[]
+    for h in hs
+        O = exp(-τ*h)
+        @cast P[(σⁱ, σⁱ′), (σⁱ⁺¹, σⁱ⁺¹′)] |= O[(σⁱ, σⁱ⁺¹), (σⁱ′, σⁱ⁺¹′)] (σⁱ:d, σⁱ′:d)
+        U, S, V = svd(P)
+
+        @cast U[1, k, σⁱ, σⁱ′]     := U[(σⁱ, σⁱ′), k] * √(S[k])      (σⁱ:d)
+        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
+        push!(tensors, U, Ū)
+    end
+    MPO{L, T}(tensors)
+end
+
+
+"""
+
+"""
+function MPO_time_evolvers(h1::Matrix, hi::Matrix, hL::Matrix, τ, L, d)
+    if iseven(L)
+        odd_hs  = [h1, [hi for _ in 3:2:(L-1)]...]
+        even_hs = [[hi for i in 2:2:(L-1)]..., hL]
+    else
+        odd_hs  = [h1, [hi for _ in 3:2:(L-1)]..., hL]
+        even_hs = [hi for i in 2:2:(L-1)]
+    end
+    
+    Uodd  = _MPO_handed_time_evolver(odd_hs, τ, L, d)
+    Ueven = _MPO_handed_time_evolver(even_hs, τ, L, d)
+    Uodd, Ueven
+end
+
+function imag_time_evolution(ψ::MPS{L, T}, h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, 
+                             β, N, Dcut) where {L, T}
+    τ = β/N
+    d = length(ψ[1][1, 1, :])
+    ϕ = ψ  # Ground state guess
+    dir = left
+    Uodd, Ueven = MPO_time_evolvers(h1, hi, hL, τ, L, d)
+    for _ in 1:N
+        ϕ1, dir = compress(Uodd  * ϕ,  dir, Dcut=Dcut)
+        ϕ,  dir = compress(Ueven * ϕ1, dir, Dcut=Dcut)
+        #ϕ,  dir = compress(Uodd  * ϕ2, dir, Dcut=Dcut)
+    end
+    ϕ
+end
+#+END_SRC
 #+HTML: </details>
+#+HTML: </p>
+
+*** Iterative Ground State Search
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/groundstate.jl
+
+function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
+    Rs = Array{T, 3}[]
+    B = ψ[L]
+    W = H[L]
+    @reduce R[bᴸ⁻¹, aᴸ⁻¹, aᴸ⁻¹′] := sum(σᴸ, σᴸ′, bᴸ, aᴸ,  aᴸ′) begin 
+        (conj.(B))[aᴸ⁻¹, aᴸ, σᴸ] * W[bᴸ⁻¹, bᴸ, σᴸ, σᴸ′] * B[aᴸ⁻¹′, aᴸ′, σᴸ′]
+    end
+    push!(Rs, R)
+    for i in (L-1):-1:2
+        B = ψ[i]
+        W = H[i]
+        @reduce R[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := sum(σⁱ, σⁱ′, bⁱ, aⁱ,  aⁱ′) begin 
+            (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R[bⁱ,aⁱ,aⁱ′]
+        end
+        push!(Rs, R)
+    end
+    reverse(Rs)
+end
+
+function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs, Dcut) where {L, T}
+    L_exs = Array{T, 3}[]
+    L_ex  = ones(T, 1, 1, 1)
+    for l in 1:(L-1)
+        M    = ψ[l]
+        Dˡ⁻¹, Dˡ, d = size(M)
+        W    = H[l]
+        R_ex = R_exs[l]
+        @cast  v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
+
+        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+        end
+
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        E = λ[1]
+        v⁰ = Φ[:,1]
+
+        @cast Mm[(σˡ, aˡ⁻¹), aˡ] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+        U, S, V = psvd(Mm, rank=Dcut)
+        @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d)
+
+        @reduce L_ex[bˡ, aˡ, aˡ′] := sum(σˡ, σˡ′, bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′) begin
+            L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+        end
+        push!(L_exs, L_ex)
+
+        SVp = Diagonal(S)*(V')
+        Bp1 = ψ.tensors[l+1]
+        @tensor Mp1[sⁱ⁻¹, aⁱ, σⁱ] := SVp[sⁱ⁻¹, aⁱ⁻¹] * Bp1[aⁱ⁻¹, aⁱ, σⁱ]
+        ψ.tensors[l+1] = Mp1
+    end
+    return ψ, L_exs
+end
+
+# function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, Rs, Dcut) where {L, T}
+#     L_exs = Array{T, 3}[]
+#     B = ψ[1]
+#     D⁰, D¹, d = size(B)
+#     W = H[1]
+#     R = Rs[1]
+#     @cast v[(σ¹, a⁰, a¹)] |= B[a⁰, a¹, σ¹]
+#     @reduce h[(σ¹, a¹), (σ¹′, a¹′)] |= sum(b⁰, b¹) begin
+#         W[b⁰, b¹, σ¹, σ¹′] * R[b¹, a¹, a¹′]
+#     end
+#     λ⁰, v⁰ = eigs(h, v0=v, nev=1, which=:SR)
+#     @cast M[(σ¹, a⁰), a¹] |= v⁰[(σ¹, a⁰, a¹)] (a⁰:D⁰, a¹:D¹, σ¹:d)
+#     U, S, V = psvd(M, rank=Dcut)
+#     @cast   A[a⁰, a¹, σ¹]  |= U[(σ¹, a⁰), a¹] (σ¹:d)
+#     @reduce L_ex[b¹, a¹, a¹′] := sum(σ¹, σ¹′, b⁰, a⁰, a⁰′) begin
+#         (conj.(A))[a⁰, a¹, σ¹] * W[b⁰, b¹, σ¹, σ¹′] * A[a⁰′, a¹′, σ¹′]
+#     end
+#     push!(L_exs, L_ex)
+#     ψ.tensors[1] = A # Mutate ψ
+
+#     for l in 2:(L-1)
+#         B = ψ[l]
+#         W = H[l]
+#         R = Rs[l]
+#         SVp = Diagonal(S)*V'
+#         @reduce M[aⁱ⁻¹, aⁱ, σⁱ]   := sum(aⁱ⁻¹′) SVp[aⁱ⁻¹, aⁱ⁻¹′] * B[aⁱ⁻¹′, aⁱ, σⁱ]
+#         @cast   v[(σⁱ, aⁱ⁻¹, aⁱ)] |= M[aⁱ⁻¹, aⁱ, σⁱ]
+#         @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+#             L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R[bˡ, aˡ, aˡ′]
+#         end
+#         sizem1 = size(M)
+#         #println((l=l, sizeB=size(B), sizeM=size(M), sizeR=size(R), sizeRp1=size(Rs[l-1])))
+        
+#         λ⁰, v⁰ = eigs(h, v0=v, nev=1, which=:SR)
+#         Dˡ⁻¹, Dˡ, d = size(M)       
+#         @cast M[aˡ⁻¹, aˡ, σˡ]    |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+#         @cast Mm[(σˡ, aˡ⁻¹), aˡ] |= M[aˡ⁻¹, aˡ, σˡ]
+
+#         U, S, V = psvd(Mm, rank=Dcut)
+#         #@cast A[aⁱ⁻¹, aⁱ, σⁱ] |= U[(σⁱ, aⁱ⁻¹), aⁱ] (σⁱ:d)
+#         @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d)
+#         println((sizeB =size(B), sizem1=sizem1, sizem2=size(M), sizeA=size(A), sizeU=size(U)))
+#         @reduce L_ex[bˡ, aˡ, aˡ′] := sum(σˡ, σˡ′, bˡ⁻¹, aˡ⁻¹,  aˡ⁻¹′) begin
+#             L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+#         end
+#         push!(L_exs, L_ex)
+#         ψ.tensors[l] = A
+#     end
+#     B = ψ.tensors[L]
+#     @reduce M[aᴸ⁻¹, aᴸ, σᴸ] := sum(aᴸ⁻¹′) (Diagonal(S)*V')[aᴸ⁻¹, aᴸ⁻¹′] * B[aᴸ⁻¹′, aᴸ, σᴸ]
+#     ψ.tensors[L] = M
+#     ψ, L_exs, λ⁰[1]
+# end
+
+function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs, Dcut) where {L, T}
+    R_exs = Array{T, 3}[]
+    A = ψ[L]
+    Dᴸ⁻¹, Dᴸ, d = size(A)
+    W = H[L]
+    L_ex = L_exs[L-1]
+    @cast v[(σᴸ, aᴸ⁻¹, aᴸ)] |= A[aᴸ⁻¹, aᴸ, σᴸ]
+    @reduce h[(σᴸ, aᴸ⁻¹), (σᴸ′, aᴸ⁻¹′)] |= sum(bᴸ⁻¹, bᴸ) begin
+        L_ex[bᴸ⁻¹, aᴸ⁻¹, aᴸ⁻¹′] * W[bᴸ⁻¹, bᴸ, σᴸ, σᴸ′]
+    end
+    λ⁰, v⁰ = eigs(h, v0=v, nev=1, which=:SR)
+    @cast M[aᴸ⁻¹, (σᴸ, aᴸ)] |= v⁰[(σᴸ, aᴸ⁻¹, aᴸ)] (aᴸ⁻¹:Dᴸ⁻¹, aᴸ:Dᴸ, σᴸ:d)
+
+    U, S, V = psvd(M, rank=Dcut)
+
+    @cast B[aᴸ⁻¹, aᴸ, σᴸ] |= V'[aᴸ⁻¹, (σᴸ, aᴸ)] (σᴸ:d)
+
+    @reduce R_ex[bᴸ⁻¹, aᴸ⁻¹, aᴸ⁻¹′] := sum(σᴸ, σᴸ′, bᴸ, aᴸ,  aᴸ′) begin 
+        (conj.(B))[aᴸ⁻¹, aᴸ, σᴸ] * W[bᴸ⁻¹, bᴸ, σᴸ, σᴸ′] * B[aᴸ⁻¹′, aᴸ′, σᴸ′]
+    end
+    push!(R_exs, R_ex)
+    for l in (L-1):-1:2
+        A = ψ[l]
+        Dᴸ⁻¹, Dᴸ, d = size(A)
+        W = H[l]
+        L_ex = L_exs[l-1]
+        US = U * Diagonal(S)
+        @reduce M[aˡ⁻¹, aˡ, σˡ]   := sum(aˡ′) A[aˡ⁻¹, aˡ′, σˡ] * US[aˡ′, aˡ]
+        @cast   v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
+
+        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+        end
+        
+        λ⁰, v⁰ = eigs(h, v0=v, nev=1, which=:SR)
+        Dˡ⁻¹, Dˡ, d = size(M)       
+        @cast M[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+        U, S, V = psvd(M, rank=Dcut)
+
+        @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
+
+        @reduce R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := sum(σⁱ, σⁱ′, bⁱ, aⁱ,  aⁱ′) begin 
+            (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+        end
+        push!(R_exs, R_ex)
+    end
+    A = ψ.tensors[1]
+    @reduce M[a⁰, a¹, σ¹] := sum(a¹′) A[a⁰, a¹′, σ¹] * (U * Diagonal(S))[a¹′, a¹]
+    ψ.tensors[1] = M
+    ψ, reverse(R_exs), λ⁰[1]
+end
+
+not(x) = ~x
+
+function isconverged(ψ::MPS, H::MPO; ϵ=1e-2)
+    ϕ = rightcanonical(ψ)
+    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
+end
+
+function ground_state(ψ::MPS{L, T}, H::MPO{L, T}, Dcut) where {L, T}
+    ψ = ψ |> copy
+    R_exs = R_exprs(ψ, H)
+    converged = false
+    count     = 0
+    while not(converged)
+        #println(size.(ψ.tensors))
+        ψ, L_exs = sweep!(right, ψ, H, R_exs, Dcut)
+        #println(size.(ψ.tensors))
+        ψ, R_exs, E₀′ = sweep!(left,  ψ, H, L_exs, Dcut)
+        #println(size.(ψ.tensors))
+        #println(size.(R_exs))
+
+        count += 1
+        @show count
+        if isconverged(ψ, H)
+            converged = true
+        elseif count >= 100
+            @warn "Did not converge in 200 iterations"
+            break
+        end
+    end
+    ψ, E₀′
+end
+
+realize(x::Number) = error("Unrecognized numerical type")
+realize(x::Real) = x
+function realize(x::Complex)
+    abs(imag(x)) < 1e-13 || error("Non-zero imaginary component")
+    real(x)
+end
+
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
+*** Tests
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia
+using Test, MatrixProductStates
+
+@testset "TFIM" begin
+    g = 1.0; L = 7
+
+    id = [1.0 0.0; 0.0 1.0]
+    σˣ = [0.0 1.0; 1.0 0.0]
+    σᶻ = [1.0 0.0; 0.0 -1.0]
+
+    H_tnsr = zeros(3, 3, 2, 2)
+    H_tnsr[1, 1, :, :] = id
+    H_tnsr[2, 1, :, :] = -σᶻ
+    H_tnsr[3, 1, :, :] = -g*σˣ
+    H_tnsr[3, 2, :, :] = σᶻ
+    H_tnsr[3, 3, :, :] = id
+    H = MPO(H_tnsr, L)
+
+    ψ = randn(MPS{L, Float64}, 100, 2)
+    ψ̃ = compress(ψ, Left(), Dcut=80)[1]
+
+    @test              ψ̃'ψ̃ ≈ 1
+    @test          ψ'ψ/ψ'ψ ≈ ψ̃'ψ̃
+    @test ((ψ'*(H*ψ))/ψ'ψ) ≈ (ψ̃' * (H * ψ̃))/ψ̃'ψ̃
+    @test ((ψ'*(H*ψ))/ψ'ψ) ≈ (ψ̃' * (H * ψ))/ψ̃'ψ
+end
+
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
