@@ -3,8 +3,6 @@
 # #+HTML: <p>
 
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:1]]
-#---------------------------------------------------------------------
-# Matrix Product States
 """
     MPS{L, T<:Number}
 
@@ -44,16 +42,7 @@ function Base.randn(::Type{MPS{L, T}}, D::Int, d::Int) where {L, T}
     tensors = [randn(1, D, d), [randn(D, D, d) for _ in 2:(L-1)]..., randn(D, 1, d)]
     MPS{L, T}(tensors) |> leftcanonical |> rightcanonical
 end
-# Matrix Product States:1 ends here
 
-
-
-
-# #+HTML: <details><summary>Constructors and printing</summary>
-# #+HTML: <p>
-
-
-# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:2]]
 """
     MPS(vs::Vector{Vector})
 Create an `MPS` representing a product state (all bonds have dimension 1),
@@ -110,21 +99,15 @@ end
 function Base.show(io::IO, ψ::MPS{L, T}) where {L, T}
     print(io, "MPO on $L sites")
 end
-# Matrix Product States:2 ends here
+# Matrix Product States:1 ends here
 
 
-
-# #+HTML: </p>
-# #+HTML: </details>
 
 # #+HTML: <details><summary>Adjoint MPS</summary>
 # #+HTML: <p>
 
 
-# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:3]]
-#---------------------------------------------------------------------
-# Adjoint Matrix Product States 
-
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:2]]
 function Base.adjoint(ψ::MPS{L, T}) where {L,T}
     Adjoint{T, MPS{L, T}}(ψ)
 end
@@ -148,4 +131,4 @@ function Base.getindex(ψ::Adjoint{T, MPS{L, T}}, args...) where {L, T}
 end
 
 adjoint_tensors(ψ::MPS) = reverse(conj.(permutedims.(ψ.tensors, [(2, 1, 3)])))
-# Matrix Product States:3 ends here
+# Matrix Product States:2 ends here

@@ -3,14 +3,10 @@
 # #+HTML: </p>
 # #+HTML: </details>
 
-
-
 # #+HTML: <details><summary>MPS Contraction</summary>
 # #+HTML: <p>
 
-# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:4]]
-dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
-
+# [[file:~/.julia/dev/MatrixProductStates/README.org::*Matrix%20Product%20States][Matrix Product States:3]]
 """
     Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
 representing
@@ -40,7 +36,7 @@ function Base.:(*)(ψ′::Adjoint{T, MPS{L, T}}, ϕ::MPS{L, T}) where {L, T}
     
     @tensor M̃dg[1, bᴸ⁻¹, σᴸ] * cont[bᴸ⁻¹, aᴸ⁻¹] * M[aᴸ⁻¹, 1, σᴸ]
 end
-# Matrix Product States:4 ends here
+# Matrix Product States:3 ends here
 
  
 
@@ -101,5 +97,32 @@ function Base.:(*)(O1::MPO{L, T}, O2::MPO{L, T}) where {L, T}
         push!(tensors, V)
     end
     MPO{L, T}(tensors)
+end
+
+"""
+    Base.:(*)(ψ::Adjoint{T,MPS{L,T}}, O::MPO) where {L,T}
+representing
+
+    •--(a¹ a¹)--•--(a² a²)--•--(a³ a³)--•       
+    |           |           |           | 
+    σ′¹         σ′²         σ′³         σ′⁴
+    σ′¹         σ′²         σ′³         σ′⁴
+    |           |           |           | 
+    •--(b¹ b¹)--•--(b² b²)--•--(b³ b³)--•
+    |           |           |           | 
+    σ¹          σ²          σ³          σ⁴ 
+"""
+function Base.:(*)(ψ′::Adjoint{T,MPS{L,T}}, O::MPO{L, T}) where {L,T}
+    ψ = ψ′.parent
+    tensors = Array{T,3}[]
+    Ws = dg.(reverse(O.tensors))
+    for i in 1:L
+        W = Ws[i]
+        M = ψ.tensors[i]
+
+        @reduce N[(bᵢ₋₁, aᵢ₋₁), (bᵢ, aᵢ), σᵢ] :=  sum(σ′ᵢ) W[bᵢ₋₁, bᵢ, σᵢ, σ′ᵢ] * M[aᵢ₋₁, aᵢ, σ′ᵢ]
+        push!(tensors, N)
+    end
+    adjoint(MPS{L, T}(tensors))
 end
 # Matrix Product Operators:2 ends here

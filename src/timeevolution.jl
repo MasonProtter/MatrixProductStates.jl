@@ -3,9 +3,6 @@
 # #+HTML: <p>
 
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Imaginary%20Time%20Evolution][Imaginary Time Evolution:1]]
-#---------------------------------------------------------------------
-# Imaginary Time Evolution Assuming only nearest neighbor interactions
-
 """
      MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
 """
@@ -22,7 +19,6 @@ function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     end
     MPO{L, T}(tensors)
 end
-
 
 """
 

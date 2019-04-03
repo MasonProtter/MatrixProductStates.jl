@@ -26,8 +26,7 @@ function compress(ψ::MPS{L, T}, to_the::Right; Dcut::Int=typemax(Int)) where {L
         B = ψ[i]
         d = length(B[1, 1, :])
 
-        @tensor M[aⁱ⁻¹, aⁱ, σⁱ]    := (Diagonal(S)*V')[aⁱ⁻¹, aⁱ⁻¹′] * B[aⁱ⁻¹′, aⁱ, σⁱ]
-
+        @tensor M[aⁱ⁻¹, aⁱ, σⁱ] := (Diagonal(S)*V')[aⁱ⁻¹, aⁱ⁻¹′] * B[aⁱ⁻¹′, aⁱ, σⁱ]
         @cast   Mm[(σⁱ, aⁱ⁻¹), aⁱ] |= M[aⁱ⁻¹, aⁱ, σⁱ]
         
         U, S, V = psvd(Mm, rank=Dcut)
