@@ -9,6 +9,8 @@ The code in this repo is currently under development. Many things
 do not work and even fewer things are tested. 
 
 ** Example: Transverse Field Ising Model 
+#+HTML: <details><summary>Click me!</summary>
+#+HTML: <p>
 Suppose we didn't realize the one dimensional transverse field Ising
 model was exactly solvable and we wanted to study it with DMRG.
 
@@ -82,7 +84,8 @@ and we can varify that it's approximately an eigenstate:
 julia> ϕ' * H * H * ϕ  ≈ (ϕ' * H * ϕ)^2 # computing ⟨ϕ| H^2 |ϕ⟩ ≈ (⟨ϕ|H|ϕ⟩)^2
 true
 #+END_SRC
-
+#+HTML: </details>
+#+HTML: </p>
 ** Source Code
 This readme is a literate document containing all of the source and
 test code for the package.
