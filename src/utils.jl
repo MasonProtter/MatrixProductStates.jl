@@ -5,6 +5,14 @@
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Utils][Utils:1]]
 export ⊗, realize
 
+abstract type Direction end
+
+struct Left  <: Direction end # Often useful to dispatch on direction an algorithm is going
+struct Right <: Direction end
+
+const left  = Left()
+const right = Right()
+
 A ⊗ B = kron(A, B)
 
 realize(x::Number) = error("Unrecognized numerical type")
@@ -18,9 +26,4 @@ dg(M::Array{T, 4}) where {T} = permutedims(conj.(M), (2, 1, 3, 4))
 dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
 
 not(x) = ~x
-
-function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
-    ϕ = rightcanonical(ψ)
-    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
-end
 # Utils:1 ends here

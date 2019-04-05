@@ -1,11 +1,11 @@
 # Imaginary Time Evolution
+# I don't think this works!
 # #+HTML: <details><summary>Source</summary>
 # #+HTML: <p>
 
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Imaginary%20Time%20Evolution][Imaginary Time Evolution:1]]
-"""
-     MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-"""
+# Fixme! this does not appear to find ground states!
+
 function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     tensors = Array{T, 4}[]
     for h in hs
@@ -20,9 +20,6 @@ function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     MPO{L, T}(tensors)
 end
 
-"""
-
-"""
 function MPO_time_evolvers(h1::Matrix, hi::Matrix, hL::Matrix, τ, L, d)
     if iseven(L)
         odd_hs  = [h1, [hi for _ in 3:2:(L-1)]...]
@@ -39,6 +36,7 @@ end
 
 function imag_time_evolution(ψ::MPS{L, T}, h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, 
                              β, N, Dcut) where {L, T}
+    @warn "This probably still doesn't work!"
     τ = β/N
     d = length(ψ[1][1, 1, :])
     ϕ = ψ  # Ground state guess

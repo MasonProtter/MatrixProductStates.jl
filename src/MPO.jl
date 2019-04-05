@@ -78,4 +78,31 @@ end
 Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
 Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
 Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
+
+function Base.show(O::MPO{L, T}) where {L, T}
+    d = length(ψ.tensors[2][1, 1, 1, :])
+    bonddims = [size(ψ[i][:, :, 1, 1]) for i in 1:L]
+    println("Matrix product Operator on $L sites")
+    _show_mpo_dims(L, d, bonddims)
+end
+
+function _show_mpo_dims(io::IO, L, d, bonddims)
+    println(io, "  Physical dimension: $d")
+    print(io, "  Bond dimensions:   ")
+    if L > 8
+        for i in 1:8
+            print(io, bonddims[i], " × ")
+        end
+        print(io, " ... × ", bonddims[L])
+    else
+        for i in 1:(L-1)
+            print(io, bonddims[i], " × ")
+        end
+        print(io, bonddims[L])
+    end
+end
+
+function Base.show(io::IO, O::MPO{L, T}) where {L, T}
+    print(io, "MPO on $L sites")
+end
 # Matrix Product Operators:1 ends here

@@ -3,12 +3,6 @@
 # #+HTML: <p>
 
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Compression][Compression:1]]
-abstract type Direction end
-struct Left  <: Direction end
-struct Right <: Direction end
-const left  = Left()
-const right = Right()
-
 function compress(ψ::MPS{L, T}, to_the::Right; Dcut::Int=typemax(Int)) where {L, T}
     tensors = Array{T, 3}[]
     

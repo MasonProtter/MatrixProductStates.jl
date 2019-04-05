@@ -97,7 +97,7 @@ function _show_mps_dims(io::IO, L, d, bonddims)
 end
 
 function Base.show(io::IO, ψ::MPS{L, T}) where {L, T}
-    print(io, "MPO on $L sites")
+    print(io, "MPS on $L sites")
 end
 # Matrix Product States:1 ends here
 

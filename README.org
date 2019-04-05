@@ -8,8 +8,82 @@ states]]. This same project has been undertaken in [[https://github.com/0/Lattic
 The code in this repo is currently under development. Many things
 do not work and even fewer things are tested. 
 
+** Example: Transverse Field Ising Model 
+Suppose we didn't realize the one dimensional transverse field Ising
+model was exactly solvable and we wanted to study it with DMRG.
+
+The TFIM Hamiltonian is written
+#+BEGIN_SRC 
+H = - ∑ᵢ σᶻᵢσᶻᵢ₊₁ - ∑ᵢ g σˣᵢ 
+#+END_SRC
+which in MPO form can be written as
+#+BEGIN_SRC 
+H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
+                   [ 𝟙    𝟘    𝟘] [ 𝟙    𝟘    𝟘]     [ 𝟙    𝟘    𝟘] [  𝟙 ]
+  = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘    𝟘| |-σᶻ |
+                   [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ   𝟙] [-gσˣ]
+#+END_SRC
+We can study this Hamiltonian using MatrixProductStates.jl as follows:
+
+We first make a function for generating the Hamiltonian given a coupling strength `g = h/J` and a system length `L`:
+#+BEGIN_SRC jupyter-julia
+using MatrixProductStates
+
+function H_TFIM(g, L)
+    id = [1  0; 
+          0  1]
+    σˣ = [0  1; 
+          1  0]
+    σᶻ = [1  0; 
+          0 -1]
+    H_tnsr = zeros(Complex{Float64}, 3, 3, 2, 2)
+    H_tnsr[1, 1, :, :] = id    
+    H_tnsr[2, 1, :, :] = -σᶻ  
+    H_tnsr[3, 1, :, :] = -g*σˣ
+    H_tnsr[3, 2, :, :] = σᶻ   
+    H_tnsr[3, 3, :, :] = id   
+    return MPO(H_tnsr, L)
+end
+#+END_SRC
+Note: on my machine, some "errors" are shown when I type `using
+MatrixProductStates` related to `Strided.jl`. These can be ignored,
+but I hope to fix them soon.
+
+Now suppose we want to know the ground state of this system for
+`g=0.8` and `L=12` and we have no idea what the MPS form of the ground
+state looks like a-priori.
+#+BEGIN_SRC jupyter-julia
+g = 0.8; L = 12;
+
+d    = 2;   # This is the local Hilbert space dimension for each site
+Dcut = 100; # This is the maximum bond dimension we'll allow our matrix product state to take
+
+H = H_TFIM(g, L)
+ψ = randn(MPS{L, Complex{Float64}}, Dcut, d) # Generate a completely randomized matrix product state
+
+ϕ, Eₒ = ground_state(ψ, H, quiet=true) #Set quiet to false (the deault) to turn off notifications about the algorithm's progress
+#+END_SRC
+We now have the ground state `ϕ`, and an estimate of it's energy
+eigenvalue `Eₒ`!
+
+Note that 12 sites can be easily studied with far less computational
+cost as an exact diagonalization, but I didn't want to suggest doing
+something like `L=50` right off the bat since that took ~90 minutes on
+my machine.
+
+We can make sure that this state's energy matches our estimate:
+#+BEGIN_SRC jupyter-julia
+julia> ϕ' * H * ϕ ≈ E₀ # computing ⟨ϕ|H|ϕ⟩
+true
+#+END_SRC
+and we can varify that it's approximately an eigenstate:
+#+BEGIN_SRC jupyter-julia
+julia> ϕ' * H * H * ϕ  ≈ (ϕ' * H * ϕ)^2 # computing ⟨ϕ| H^2 |ϕ⟩ ≈ (⟨ϕ|H|ϕ⟩)^2
+true
+#+END_SRC
+
 ** Source Code
-This readme is a literal document containing all of the source and
+This readme is a literate document containing all of the source and
 test code for the package.
 *** Module Definition
 #+HTML: <details><summary>Source</summary>
@@ -18,20 +92,54 @@ test code for the package.
 module MatrixProductStates
 
 using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Strided
+#using ProgressMeter
 
 export *, /, ==, ≈, isequal, adjoint, getindex, randn
 export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
 export ground_state
 
+include("utils.jl")
 include("MPS.jl")
 include("MPO.jl")
 include("compression.jl")
 include("contraction.jl")
-include("timeevolution.jl")
 include("groundstate.jl")
-include("utils.jl")
+include("correlation.jl")
+include("timeevolution.jl")
+
 
 end
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
+*** Utils
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/utils.jl
+export ⊗, realize
+
+abstract type Direction end
+
+struct Left  <: Direction end # Often useful to dispatch on direction an algorithm is going
+struct Right <: Direction end
+
+const left  = Left()
+const right = Right()
+
+A ⊗ B = kron(A, B)
+
+realize(x::Number) = error("Unrecognized numerical type")
+realize(x::Real) = x
+function realize(x::Complex; ϵ=1e-13)
+    abs(imag(x)) < ϵ || error("Non-zero imaginary component")
+    real(x)
+end
+
+dg(M::Array{T, 4}) where {T} = permutedims(conj.(M), (2, 1, 3, 4))
+dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
+
+not(x) = ~x
+
 #+END_SRC
 #+HTML: </details>
 #+HTML: </p>
@@ -133,7 +241,7 @@ function _show_mps_dims(io::IO, L, d, bonddims)
 end
 
 function Base.show(io::IO, ψ::MPS{L, T}) where {L, T}
-    print(io, "MPO on $L sites")
+    print(io, "MPS on $L sites")
 end
 
 #+END_SRC
@@ -291,6 +399,33 @@ end
 Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
 Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
 Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
+
+function Base.show(O::MPO{L, T}) where {L, T}
+    d = length(ψ.tensors[2][1, 1, 1, :])
+    bonddims = [size(ψ[i][:, :, 1, 1]) for i in 1:L]
+    println("Matrix product Operator on $L sites")
+    _show_mpo_dims(L, d, bonddims)
+end
+
+function _show_mpo_dims(io::IO, L, d, bonddims)
+    println(io, "  Physical dimension: $d")
+    print(io, "  Bond dimensions:   ")
+    if L > 8
+        for i in 1:8
+            print(io, bonddims[i], " × ")
+        end
+        print(io, " ... × ", bonddims[L])
+    else
+        for i in 1:(L-1)
+            print(io, bonddims[i], " × ")
+        end
+        print(io, bonddims[L])
+    end
+end
+
+function Base.show(io::IO, O::MPO{L, T}) where {L, T}
+    print(io, "MPO on $L sites")
+end
 #+END_SRC 
 
 #+HTML: <details><summary>MPO Contraction</summary>
@@ -388,11 +523,7 @@ end
 #+HTML: <details><summary>Source</summary>
 #+HTML: <p>
 #+BEGIN_SRC julia :comments both :tangle src/compression.jl
-abstract type Direction end
-struct Left  <: Direction end
-struct Right <: Direction end
-const left  = Left()
-const right = Right()
+
 
 function compress(ψ::MPS{L, T}, to_the::Right; Dcut::Int=typemax(Int)) where {L, T}
     tensors = Array{T, 3}[]
@@ -461,13 +592,185 @@ compress(ψ; Dcut) = compress(ψ, left, Dcut=Dcut)[1]
 #+HTML: </p>
 #+HTML: </details>
 
+*** Iterative Ground State Search
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/groundstate.jl
+
+function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
+    R_exs = Array{T, 3}[]
+    B = ψ[L]
+    W = H[L]
+    R_ex = ones(T, 1, 1, 1)
+    for i in L:-1:2
+        B = ψ[i]
+        W = H[i]
+        @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+        push!(R_exs, R_ex)
+    end
+    reverse(R_exs)
+end
+
+function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
+    L_exs = Array{T, 3}[]
+    L_ex  = ones(T, 1, 1, 1)
+    E = zero(T)
+    for l in 1:(L-1)
+        M    = ψ[l]
+        Dˡ⁻¹, Dˡ, d = size(M)
+        W    = H[l]
+        R_ex = R_exs[l]
+
+        @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
+
+        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+        end strided
+        h = collect(h)
+
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        E = λ[1]::T
+        v⁰ = Φ[:,1]::Vector{T}
+
+        @cast Mm[(σˡ, aˡ⁻¹), aˡ] := v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+
+        U, S, V = svd(Mm)
+        @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
+        @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
+
+        ψ.tensors[l] = A
+
+        @tensor L_ex[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+
+        push!(L_exs, L_ex)
+
+        SVp = Diagonal(S)*(V')
+        Bp1 = ψ.tensors[l+1]
+        @tensor Mp1[sⁱ⁻¹, aⁱ, σⁱ] := SVp[sⁱ⁻¹, aⁱ⁻¹] * Bp1[aⁱ⁻¹, aⁱ, σⁱ]
+        ψ.tensors[l+1] = Mp1
+    end
+    ψ, L_exs, E
+end
+
+function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
+    R_exs = Array{T, 3}[]
+    R_ex  = ones(T, 1, 1, 1)
+    E = zero(T)
+    for l in L:-1:2
+        M = ψ[l]
+        Dˡ⁻¹, Dˡ, d = size(M)
+        W    = H[l]
+        L_ex = L_exs[l-1]
+        @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
+
+        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+        end strided
+
+        h = collect(h)
+
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        E = λ[1]::T
+        v⁰ = Φ[:,1]::Vector{T}
+        @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+        U, S, V = svd(Mm)
+        @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
+
+        ψ.tensors[l] = B
+
+        @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+        push!(R_exs, R_ex)
+
+        US = U * Diagonal(S)
+        Am1 = ψ.tensors[l-1]
+        @tensor Mm1[aˡ⁻², sˡ⁻¹, σˡ⁻¹] :=  Am1[aˡ⁻², aˡ⁻¹′, σˡ⁻¹] * US[aˡ⁻¹′, sˡ⁻¹]
+        ψ.tensors[l-1] = Mm1
+    end
+    ψ, R_exs, E
+end
+
+function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) where {L, T}
+    ϕ = ψ |> copy
+    
+    quiet || println("Computing R expressions")
+
+    R_exs = R_exprs(ψ, H)
+    converged = false
+    count     = 0
+    E₀ = zero(T)
+    while not(converged)
+        quiet || println("Performing right sweep")
+        ϕ, L_exs, _ = sweep!(right, ϕ, H, R_exs)
+
+        quiet || println("Performing left sweep")
+        ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
+
+        count += 1
+
+        if iseigenstate(ϕ, H)
+            quiet || println("Converged in $count iterations")
+            converged = true
+        elseif count >= maxiter
+            @warn "Did not converge in $maxiter iterations"
+            break
+        end
+    end
+    ϕ, E₀
+end
+
+function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
+    ϕ = rightcanonical(ψ)
+    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
+end
+
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
+
+*** Correlation Functions
+#+HTML: <details><summary>Source</summary>
+#+HTML: <p>
+#+BEGIN_SRC julia :comments both :tangle src/correlation.jl
+
+"""
+    two_point_correlator(i, j, L, op_i::Matrix, op_j::Matrix)
+
+Create an MPO on `L` sites (with bond dimension 1) representing identity operators everywhere except
+sites `i` and `j` where `op_i` and `op_j` are inserted instead. ie.
+
+    𝟙 ⊗ 𝟙 ⊗ ... ⊗ op_i ⊗ 𝟙 ⊗ ... ⊗ op_j ⊗ 𝟙 ⊗ ... ⊗ 𝟙
+"""
+function two_point_correlator(i, j, L, op_i::Matrix, op_j::Matrix)
+    d = size(op_i)[1]
+    @assert (size(op_i) == (d, d)) && (size(op_j) == (d, d))
+    @assert i in 1:L
+    @assert j in 1:L
+
+    op_i_tnsr = resphape(convert(Matrix{Complex{Float64}}, op_i), 1, 1, d, d)
+    op_j_tnsr = resphape(convert(Matrix{Complex{Float64}}, op_j), 1, 1, d, d)
+
+    id_tnsr   = reshape(typeof(op_i)(one(eltype(op_i_tnsr))I, d, d), 1, 1, d, d)
+
+    tensors = map(1:L) do l
+        O_tnsr = (l == i ? op_i_tnsr : 
+                  l == j ? op_j_tnsr : 
+                  id_tnsr)
+    end 
+    MPO{L,Complex{Float64}}(tensors)
+end
+
+
+#+END_SRC
+#+HTML: </details>
+#+HTML: </p>
 *** Imaginary Time Evolution
+I don't think this works!
 #+HTML: <details><summary>Source</summary>
 #+HTML: <p>
 #+BEGIN_SRC julia :comments both :tangle src/timeevolution.jl
-"""
-     MPO_odd_time_evolver(h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, τ, L) where {T}
-"""
+
+# Fixme! this does not appear to find ground states!
+
 function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     tensors = Array{T, 4}[]
     for h in hs
@@ -482,9 +785,6 @@ function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
     MPO{L, T}(tensors)
 end
 
-"""
-
-"""
 function MPO_time_evolvers(h1::Matrix, hi::Matrix, hL::Matrix, τ, L, d)
     if iseven(L)
         odd_hs  = [h1, [hi for _ in 3:2:(L-1)]...]
@@ -501,6 +801,7 @@ end
 
 function imag_time_evolution(ψ::MPS{L, T}, h1::Matrix{T}, hi::Matrix{T}, hL::Matrix{T}, 
                              β, N, Dcut) where {L, T}
+    @warn "This probably still doesn't work!"
     τ = β/N
     d = length(ψ[1][1, 1, :])
     ϕ = ψ  # Ground state guess
@@ -517,162 +818,6 @@ end
 #+HTML: </details>
 #+HTML: </p>
 
-*** Iterative Ground State Search
-#+HTML: <details><summary>Source</summary>
-#+HTML: <p>
-#+BEGIN_SRC julia :comments both :tangle src/groundstate.jl
-
-function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
-    R_exs = Array{T, 3}[]
-    B = ψ[L]
-    W = H[L]
-    R_ex = ones(T, 1, 1, 1)
-    @inbounds for i in L:-1:2
-        B = ψ[i]
-        W = H[i]
-        # @reduce R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := sum(σⁱ, σⁱ′, bⁱ, aⁱ,  aⁱ′) begin 
-        #     (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
-        # end
-        @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
-        push!(R_exs, R_ex)
-    end
-    reverse(R_exs)
-end
-
-function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
-    L_exs = Array{T, 3}[]
-    L_ex  = ones(T, 1, 1, 1)
-    E = zero(T)
-    @inbounds for l in 1:(L-1)
-        M    = ψ[l]
-        Dˡ⁻¹, Dˡ, d = size(M)
-        W    = H[l]
-        R_ex = R_exs[l]
-
-        @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
-
-        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
-            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
-        end strided
-        h = collect(h)
-
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
-        E = λ[1] 
-        v⁰ = Φ[:,1]
-
-        @cast Mm[(σˡ, aˡ⁻¹), aˡ] := v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
-
-        U, S, V = svd(Mm)
-        @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
-        @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
-
-        ψ.tensors[l] = A
-
-        @tensor L_ex[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
-        push!(L_exs, L_ex)
-
-        SVp = Diagonal(S)*(V')
-        Bp1 = ψ.tensors[l+1]
-        @tensor Mp1[sⁱ⁻¹, aⁱ, σⁱ] := SVp[sⁱ⁻¹, aⁱ⁻¹] * Bp1[aⁱ⁻¹, aⁱ, σⁱ]
-        ψ.tensors[l+1] = Mp1
-    end
-    ψ, L_exs, E
-end
-
-function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
-    R_exs = Array{T, 3}[]
-    R_ex  = ones(T, 1, 1, 1)
-    E = zero(T)
-    #@show size.(ψ.tensors)
-    @inbounds for l in L:-1:2
-        M = ψ[l]
-        Dˡ⁻¹, Dˡ, d = size(M)
-        W    = H[l]
-        L_ex = L_exs[l-1]
-        @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
-
-        @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
-            L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
-        end strided
-
-        h = collect(h)
-
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
-        E = λ[1] 
-        v⁰ = Φ[:,1]
-        @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
-        U, S, V = svd(Mm)
-        @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
-
-        ψ.tensors[l] = B
-
-        @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
-        push!(R_exs, R_ex)
-
-        US = U * Diagonal(S)
-        Am1 = ψ.tensors[l-1]
-        #(sizeAm1 = size(Am1), sizeUS=size(US)) |> println
-        @reduce Mm1[aˡ⁻², sˡ⁻¹, σˡ⁻¹] := sum(aˡ⁻¹′) Am1[aˡ⁻², aˡ⁻¹′, σˡ⁻¹] * US[aˡ⁻¹′, sˡ⁻¹]
-        ψ.tensors[l-1] = Mm1
-    end
-    ψ, R_exs, E
-end
-
-function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40) where {L, T}
-    ϕ = ψ |> copy
-    R_exs = R_exprs(ψ, H)
-    converged = false
-    count     = 0
-    E₀ = zero(T)
-    while not(converged)
-        ϕ, L_exs, _ = sweep!(right, ϕ, H, R_exs)
-        ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
-
-        count += 1
-        #@show count
-        if iseigenstate(ϕ, H)
-            converged = true
-        elseif count >= maxiter
-            @warn "Did not converge in $maxiter iterations"
-            break
-        end
-    end
-    ϕ, E₀, count
-end
-
-#+END_SRC
-#+HTML: </details>
-#+HTML: </p>
-
-*** Utils
-#+HTML: <details><summary>Source</summary>
-#+HTML: <p>
-#+BEGIN_SRC julia :comments both :tangle src/utils.jl
-export ⊗, realize
-
-A ⊗ B = kron(A, B)
-
-realize(x::Number) = error("Unrecognized numerical type")
-realize(x::Real) = x
-function realize(x::Complex; ϵ=1e-13)
-    abs(imag(x)) < ϵ || error("Non-zero imaginary component")
-    real(x)
-end
-
-dg(M::Array{T, 4}) where {T} = permutedims(conj.(M), (2, 1, 3, 4))
-dg(M::Array{T, 3}) where {T} = permutedims(conj.(M), (2, 1, 3))
-
-not(x) = ~x
-
-function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
-    ϕ = rightcanonical(ψ)
-    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
-end
-
-
-#+END_SRC
-#+HTML: </details>
-#+HTML: </p>
 ** Tests
 #+HTML:  <details><summary>Source</summary>
 #+HTML: <p>

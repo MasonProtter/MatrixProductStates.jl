@@ -6,18 +6,21 @@
 module MatrixProductStates
 
 using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Strided
+#using ProgressMeter
 
 export *, /, ==, ≈, isequal, adjoint, getindex, randn
 export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
 export ground_state
 
+include("utils.jl")
 include("MPS.jl")
 include("MPO.jl")
 include("compression.jl")
 include("contraction.jl")
-include("timeevolution.jl")
 include("groundstate.jl")
-include("utils.jl")
+include("correlation.jl")
+include("timeevolution.jl")
+
 
 end
 # Module Definition:1 ends here

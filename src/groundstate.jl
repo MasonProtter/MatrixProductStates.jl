@@ -8,12 +8,9 @@ function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
     B = ψ[L]
     W = H[L]
     R_ex = ones(T, 1, 1, 1)
-    @inbounds for i in L:-1:2
+    for i in L:-1:2
         B = ψ[i]
         W = H[i]
-        # @reduce R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := sum(σⁱ, σⁱ′, bⁱ, aⁱ,  aⁱ′) begin 
-        #     (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
-        # end
         @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
         push!(R_exs, R_ex)
     end
@@ -24,7 +21,7 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
     L_exs = Array{T, 3}[]
     L_ex  = ones(T, 1, 1, 1)
     E = zero(T)
-    @inbounds for l in 1:(L-1)
+    for l in 1:(L-1)
         M    = ψ[l]
         Dˡ⁻¹, Dˡ, d = size(M)
         W    = H[l]
@@ -38,8 +35,8 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         h = collect(h)
 
         λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
-        E = λ[1] 
-        v⁰ = Φ[:,1]
+        E = λ[1]::T
+        v⁰ = Φ[:,1]::Vector{T}
 
         @cast Mm[(σˡ, aˡ⁻¹), aˡ] := v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
 
@@ -50,6 +47,7 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         ψ.tensors[l] = A
 
         @tensor L_ex[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+
         push!(L_exs, L_ex)
 
         SVp = Diagonal(S)*(V')
@@ -64,8 +62,7 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     R_exs = Array{T, 3}[]
     R_ex  = ones(T, 1, 1, 1)
     E = zero(T)
-    #@show size.(ψ.tensors)
-    @inbounds for l in L:-1:2
+    for l in L:-1:2
         M = ψ[l]
         Dˡ⁻¹, Dˡ, d = size(M)
         W    = H[l]
@@ -79,8 +76,8 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
         h = collect(h)
 
         λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
-        E = λ[1] 
-        v⁰ = Φ[:,1]
+        E = λ[1]::T
+        v⁰ = Φ[:,1]::Vector{T}
         @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
         U, S, V = svd(Mm)
         @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
@@ -92,32 +89,43 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
 
         US = U * Diagonal(S)
         Am1 = ψ.tensors[l-1]
-        #(sizeAm1 = size(Am1), sizeUS=size(US)) |> println
-        @reduce Mm1[aˡ⁻², sˡ⁻¹, σˡ⁻¹] := sum(aˡ⁻¹′) Am1[aˡ⁻², aˡ⁻¹′, σˡ⁻¹] * US[aˡ⁻¹′, sˡ⁻¹]
+        @tensor Mm1[aˡ⁻², sˡ⁻¹, σˡ⁻¹] :=  Am1[aˡ⁻², aˡ⁻¹′, σˡ⁻¹] * US[aˡ⁻¹′, sˡ⁻¹]
         ψ.tensors[l-1] = Mm1
     end
     ψ, R_exs, E
 end
 
-function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40) where {L, T}
+function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) where {L, T}
     ϕ = ψ |> copy
+    
+    quiet || println("Computing R expressions")
+
     R_exs = R_exprs(ψ, H)
     converged = false
     count     = 0
     E₀ = zero(T)
     while not(converged)
+        quiet || println("Performing right sweep")
         ϕ, L_exs, _ = sweep!(right, ϕ, H, R_exs)
+
+        quiet || println("Performing left sweep")
         ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
-        #@show count
+
         if iseigenstate(ϕ, H)
+            quiet || println("Converged in $count iterations")
             converged = true
         elseif count >= maxiter
             @warn "Did not converge in $maxiter iterations"
             break
         end
     end
-    ϕ, E₀, count
+    ϕ, E₀
+end
+
+function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
+    ϕ = rightcanonical(ψ)
+    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
 end
 # Iterative Ground State Search:1 ends here
