@@ -91,7 +91,7 @@ true
 
 *** Correlators
 We can take advantage of the ~two_point_correlator~ function to study spin-spin correlations in the TFIM 
-#+BEGIN_SRC julia :results raw
+#+BEGIN_SRC julia :exports both
 using UnicodePlots
 
 σᶻ = [1 0 
