@@ -148,7 +148,7 @@ lineplot(js, zzs, canvas=DotCanvas, ylim=[0, 1.01], width=80, height=30,
 which shows exponentially decaying correlations in the ground state,
 as expected for ~g > 1~. We can also redo our calculation in the
 ordered phase:
-#+BEGIN_SRC julia
+#+BEGIN_SRC julia  :exports both
 g = 0.8;
 
 H = H_TFIM(g, L)
