@@ -10,7 +10,7 @@ using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Stride
 
 export *, /, ==, ≈, isequal, adjoint, getindex, randn
 export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
-export ground_state
+export ground_state, two_point_correlator, realize
 
 include("utils.jl")
 include("MPS.jl")

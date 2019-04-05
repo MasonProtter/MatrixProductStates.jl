@@ -1,12 +1,14 @@
 * MatrixProductStates.jl
 
-This is a package-in-progress in which I intend to implement a [[https://en.wikipedia.org/wiki/Density_matrix_renormalization_group][DMRG]]
+This is a package-in-progress in which I am implementing the [[https://en.wikipedia.org/wiki/Density_matrix_renormalization_group][DMRG]]
 algorithm over matrix product states as explained in Schollwöck's [[https://www.sciencedirect.com/science/article/pii/S0003491610001752][The
 density-matrix renormalization group in the age of matrix product
-states]]. This same project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
+states]]. A similar project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
 
-The code in this repo is currently under development. Many things
-do not work and even fewer things are tested. 
+To acquire this package, simply open a ~julia~ repl and type 
+#+BEGIN_SRC
+] add https://github.com/MasonProtter/MatrixProductStates.jl.git
+#+END_SRC
 
 ** Example: Transverse Field Ising Model 
 #+HTML: <details><summary>Click me!</summary>
@@ -21,9 +23,9 @@ H = - ∑ᵢ σᶻᵢσᶻᵢ₊₁ - ∑ᵢ g σˣᵢ
 which in MPO form can be written as
 #+BEGIN_SRC 
 H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
-                   [ 𝟙    𝟘    𝟘] [ 𝟙    𝟘    𝟘]     [ 𝟙    𝟘    𝟘] [  𝟙 ]
+                   [ 𝟙    𝟘    𝟘] [ 𝟙    𝟘    𝟘]     [ 𝟙    𝟘    𝟘] [ 𝟙  ]
   = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘    𝟘| |-σᶻ |
-                   [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ   𝟙] [-gσˣ]
+                   [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ   𝟙][-gσˣ]
 #+END_SRC
 We can study this Hamiltonian using MatrixProductStates.jl as follows:
 
@@ -52,11 +54,12 @@ Note: on my machine, some "errors" are shown when I type ~using
 MatrixProductStates~ related to ~Strided.jl~. These can be ignored,
 but I hope to fix them soon.
 
+*** Ground State
 Now suppose we want to know the ground state of this system for
 ~g=0.8~ and ~L=12~ and we have no idea what the MPS form of the ground
 state looks like a-priori.
 #+BEGIN_SRC julia
-g = 0.8; L = 12;
+g = 1.1; L = 12;
 
 d    = 2;   # This is the local Hilbert space dimension for each site
 Dcut = 100; # This is the maximum bond dimension we'll allow our matrix product state to take
@@ -84,8 +87,123 @@ and we can varify that it's approximately an eigenstate:
 julia> ϕ' * H * H * ϕ  ≈ (ϕ' * H * ϕ)^2 # computing ⟨ϕ| H^2 |ϕ⟩ ≈ (⟨ϕ|H|ϕ⟩)^2
 true
 #+END_SRC
+
+
+*** Correlators
+We can take advantage of the ~two_point_correlator~ function to study spin-spin correlations in the TFIM 
+#+BEGIN_SRC julia
+using UnicodePlots
+
+σᶻ = [1 0 
+      0 -1]
+
+zz(i, j) = two_point_correlator(i=>σᶻ, j=>σᶻ, 12)
+
+js = 2:12
+
+zzs = [realize(ϕ'*zz(1, j)*ϕ) for j in js] #realize will convert complex numbers with a small imaginary part to real.
+
+lineplot(js, zzs, canvas=DotCanvas, ylim=[0, 1.01], width=80, height=30, 
+         ylabel="⟨σᶻ₁σᶻⱼ⟩", xlabel="lattice site j", title="Spin-Spin Correlation for g = $g")
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_EXAMPLE
+                                      Spin-Spin Correlation for g = 1.1
+              ┌────────────────────────────────────────────────────────────────────────────────┐ 
+         1.01 │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+⟨σᶻ₁σᶻⱼ⟩      │                                                                                │ 
+              │                                                                                │ 
+              │:                                                                               │ 
+              │ '.                                                                             │ 
+              │   '.                                                                           │ 
+              │     '.                                                                         │ 
+              │       '.                                                                       │ 
+              │         ''.                                                                    │ 
+              │            ''..                                                                │ 
+              │                ''...                                                           │ 
+              │                     ''....                                                     │ 
+              │                           ''''....                                             │ 
+              │                                   '''''.......                                 │ 
+              │                                               '''''''.........                 │ 
+              │                                                               '''''''''........│ 
+            0 │                                                                                │ 
+              └────────────────────────────────────────────────────────────────────────────────┘ 
+              2                                                                               12
+                                               lattice site j
+#+END_EXAMPLE
+which shows exponentially decaying correlations in the ground state,
+as expected for ~g > 1~. We can also redo our calculation in the
+ordered phase:
+#+BEGIN_SRC julia
+g = 0.8;
+
+H = H_TFIM(g, L)
+
+ϕ, Eₒ = ground_state(ψ, H, quiet=true)
+
+ordered_zzs = [realize(ϕ'*zz(1, j)*ϕ) for j in js]
+
+lineplot(js, realize.(ordered_zzs), canvas=DotCanvas, ylim=[0, 1.01], width=80, height=30, 
+         ylabel="⟨σᶻ₁σᶻⱼ⟩", xlabel="lattice site j", title="Spin-Spin Correlation for g = $g")
+#+END_SRC
+
+#+RESULTS:
+#+BEGIN_EXAMPLE
+                                      Spin-Spin Correlation for g = 0.8
+              ┌────────────────────────────────────────────────────────────────────────────────┐ 
+         1.01 │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │.                                                                               │ 
+              │ ''.                                                                            │ 
+              │    ''..                                                                        │ 
+              │        '''....                                                                 │ 
+⟨σᶻ₁σᶻⱼ⟩      │               ''''''.........                                                  │ 
+              │                              ''''''''''''...........                           │ 
+              │                                                     '''''''......              │ 
+              │                                                                  '''....       │ 
+              │                                                                         '..    │ 
+              │                                                                            ''..│ 
+              │                                                                               '│ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+              │                                                                                │ 
+            0 │                                                                                │ 
+              └────────────────────────────────────────────────────────────────────────────────┘ 
+              2                                                                               12
+                                               lattice site j
+#+END_EXAMPLE
+
 #+HTML: </details>
 #+HTML: </p>
+
+
 ** Source Code
 This readme is a literate document containing all of the source and
 test code for the package.
@@ -100,7 +218,7 @@ using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Stride
 
 export *, /, ==, ≈, isequal, adjoint, getindex, randn
 export MPS, MPO, left, right, compress, imag_time_evolution, rightcanonical, leftcanonical 
-export ground_state
+export ground_state, two_point_correlator, realize
 
 include("utils.jl")
 include("MPS.jl")
@@ -737,23 +855,29 @@ end
 #+BEGIN_SRC julia :comments both :tangle src/correlation.jl
 
 """
-    two_point_correlator(i, j, L, op_i::Matrix, op_j::Matrix)
+    two_point_correlator((i, op_i)::Pair{Int, Matrix}, (j, op_j)::Pair{Int, Matrix}, L)
 
 Create an MPO on `L` sites (with bond dimension 1) representing identity operators everywhere except
 sites `i` and `j` where `op_i` and `op_j` are inserted instead. ie.
 
     𝟙 ⊗ 𝟙 ⊗ ... ⊗ op_i ⊗ 𝟙 ⊗ ... ⊗ op_j ⊗ 𝟙 ⊗ ... ⊗ 𝟙
+
+example: spin-spin correlation function
+
+we can construct ⟨σᶻᵢσᶻⱼ⟩ on a 12 site lattice as
+    σᶻ = [1 0; 0 -1]
+    two_point_correlator(i=>σᶻ, j=>σᶻ, 12)  
 """
-function two_point_correlator(i, j, L, op_i::Matrix, op_j::Matrix)
+function two_point_correlator((i, op_i), (j, op_j), L)
     d = size(op_i)[1]
     @assert (size(op_i) == (d, d)) && (size(op_j) == (d, d))
     @assert i in 1:L
     @assert j in 1:L
+    id = diagm(0 => ones(Complex{Float64}, d))
 
-    op_i_tnsr = resphape(convert(Matrix{Complex{Float64}}, op_i), 1, 1, d, d)
-    op_j_tnsr = resphape(convert(Matrix{Complex{Float64}}, op_j), 1, 1, d, d)
-
-    id_tnsr   = reshape(typeof(op_i)(one(eltype(op_i_tnsr))I, d, d), 1, 1, d, d)
+    op_i_tnsr = reshape(convert(Matrix{Complex{Float64}}, op_i), 1, 1, d, d) 
+    op_j_tnsr = reshape(convert(Matrix{Complex{Float64}}, op_j), 1, 1, d, d)
+    id_tnsr   = reshape(id, 1, 1, d, d)
 
     tensors = map(1:L) do l
         O_tnsr = (l == i ? op_i_tnsr : 
@@ -762,6 +886,8 @@ function two_point_correlator(i, j, L, op_i::Matrix, op_j::Matrix)
     end 
     MPO{L,Complex{Float64}}(tensors)
 end
+
+
 
 
 #+END_SRC
