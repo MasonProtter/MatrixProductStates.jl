@@ -50,9 +50,9 @@ function H_TFIM(g, L)
     return MPO(W_tnsr, L) # MPO will assume that W¹ = W_[end:end, :, :, :] and Wᴸ = W_tnsr[:, 1:1, :, :]
 end
 #+END_SRC
-Note: on my machine, some "errors" are shown when I type ~using
-MatrixProductStates~ related to ~Strided.jl~. These can be ignored,
-but I hope to fix them soon.
+Note: Some "errors" may be shown when one types ~using
+MatrixProductStates~ related to ~Strided.jl~. These can be ignored, but if they bother you, just do
+~] add TensorCast#master~.
 
 *** Ground State
 Now suppose we want to know the ground state of this system for
@@ -502,7 +502,7 @@ follows:
 
 returning 
  
-    Ĥ::MPO = Ŵ¹ Ŵ² Ŵ³ ⋅⋅⋅ Ŵᴸ⁻¹ Wᴸ
+    Ĥ::MPO = Ŵ¹ Ŵ² Ŵ³ ⋅⋅⋅ Ŵᴸ⁻¹ Wᴸ
 """
 function MPO(W::Array{T,4}, L) where {T}
     L >= 2 || throw(DomainError(L, "At least 2 sites."))
@@ -909,8 +909,8 @@ function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
         U, S, V = svd(P)
 
         @cast U[1, k, σⁱ, σⁱ′]     := U[(σⁱ, σⁱ′), k] * √(S[k])      (σⁱ:d)
-        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
-        push!(tensors, U, Ū)
+        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
+        push!(tensors, U, Ū)
     end
     MPO{L, T}(tensors)
 end
