@@ -25,8 +25,8 @@ H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
 #+END_SRC
 We can study this Hamiltonian using MatrixProductStates.jl as follows:
 
-We first make a function for generating the Hamiltonian given a coupling strength `g = h/J` and a system length `L`:
-#+BEGIN_SRC jupyter-julia
+We first make a function for generating the Hamiltonian given a coupling strength ~g = h/J~ and a system length ~L~:
+#+BEGIN_SRC julia
 using MatrixProductStates
 
 function H_TFIM(g, L)
@@ -36,23 +36,24 @@ function H_TFIM(g, L)
           1  0]
     σᶻ = [1  0; 
           0 -1]
-    H_tnsr = zeros(Complex{Float64}, 3, 3, 2, 2)
-    H_tnsr[1, 1, :, :] = id    
-    H_tnsr[2, 1, :, :] = -σᶻ  
-    H_tnsr[3, 1, :, :] = -g*σˣ
-    H_tnsr[3, 2, :, :] = σᶻ   
-    H_tnsr[3, 3, :, :] = id   
-    return MPO(H_tnsr, L)
+    W_tnsr = zeros(Complex{Float64}, 3, 3, 2, 2)
+    W_tnsr[1, 1, :, :] = id    
+    W_tnsr[2, 1, :, :] = -σᶻ  
+    W_tnsr[3, 1, :, :] = -g*σˣ
+    W_tnsr[3, 2, :, :] = σᶻ   
+    W_tnsr[3, 3, :, :] = id   
+
+    return MPO(W_tnsr, L) # MPO will assume that W¹ = W_[end:end, :, :, :] and Wᴸ = W_tnsr[:, 1:1, :, :]
 end
 #+END_SRC
-Note: on my machine, some "errors" are shown when I type `using
-MatrixProductStates` related to `Strided.jl`. These can be ignored,
+Note: on my machine, some "errors" are shown when I type ~using
+MatrixProductStates~ related to ~Strided.jl~. These can be ignored,
 but I hope to fix them soon.
 
 Now suppose we want to know the ground state of this system for
-`g=0.8` and `L=12` and we have no idea what the MPS form of the ground
+~g=0.8~ and ~L=12~ and we have no idea what the MPS form of the ground
 state looks like a-priori.
-#+BEGIN_SRC jupyter-julia
+#+BEGIN_SRC julia
 g = 0.8; L = 12;
 
 d    = 2;   # This is the local Hilbert space dimension for each site
@@ -63,21 +64,21 @@ H = H_TFIM(g, L)
 
 ϕ, Eₒ = ground_state(ψ, H, quiet=true) #Set quiet to false (the deault) to turn off notifications about the algorithm's progress
 #+END_SRC
-We now have the ground state `ϕ`, and an estimate of it's energy
-eigenvalue `Eₒ`!
+We now have the ground state ~ϕ~, and an estimate of it's energy
+eigenvalue ~Eₒ~!
 
 Note that 12 sites can be easily studied with far less computational
 cost as an exact diagonalization, but I didn't want to suggest doing
-something like `L=50` right off the bat since that took ~90 minutes on
+something like ~L=50~ right off the bat since that took ~90 minutes on
 my machine.
 
 We can make sure that this state's energy matches our estimate:
-#+BEGIN_SRC jupyter-julia
+#+BEGIN_SRC julia
 julia> ϕ' * H * ϕ ≈ E₀ # computing ⟨ϕ|H|ϕ⟩
 true
 #+END_SRC
 and we can varify that it's approximately an eigenstate:
-#+BEGIN_SRC jupyter-julia
+#+BEGIN_SRC julia
 julia> ϕ' * H * H * ϕ  ≈ (ϕ' * H * ϕ)^2 # computing ⟨ϕ| H^2 |ϕ⟩ ≈ (⟨ϕ|H|ϕ⟩)^2
 true
 #+END_SRC
