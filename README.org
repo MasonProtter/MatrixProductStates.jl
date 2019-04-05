@@ -27,8 +27,8 @@ which in MPO form can be written as
 #+BEGIN_SRC 
 H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
                    [ 𝟙    𝟘    𝟘] [ 𝟙    𝟘    𝟘]     [ 𝟙    𝟘    𝟘] [ 𝟙  ]
-  = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘    𝟘| |-σᶻ |
-                   [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ   𝟙][-gσˣ]
+  = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘   𝟘|  |-σᶻ |
+                   [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ  𝟙] [-gσˣ]
 #+END_SRC
 We can study this Hamiltonian using MatrixProductStates.jl as follows:
 
@@ -91,7 +91,7 @@ true
 
 *** Correlators
 We can take advantage of the ~two_point_correlator~ function to study spin-spin correlations in the TFIM 
-#+BEGIN_SRC julia
+#+BEGIN_SRC julia :results raw
 using UnicodePlots
 
 σᶻ = [1 0 
@@ -108,7 +108,7 @@ lineplot(js, zzs, canvas=DotCanvas, ylim=[0, 1.01], width=80, height=30,
 #+END_SRC
 
 #+RESULTS:
-#+BEGIN_EXAMPLE
+#+BEGIN_EXAMPLE 
                                       Spin-Spin Correlation for g = 1.1
               ┌────────────────────────────────────────────────────────────────────────────────┐ 
          1.01 │                                                                                │ 
