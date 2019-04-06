@@ -34,7 +34,7 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         end strided
         h = collect(h)
 
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR, maxiter=1000)
         E = λ[1]::T
         v⁰ = Φ[:,1]::Vector{T}
 
@@ -75,7 +75,7 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
 
         h = collect(h)
 
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR, maxiter=1000)
         E = λ[1]::T
         v⁰ = Φ[:,1]::Vector{T}
         @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
@@ -83,7 +83,6 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
         @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
 
         ψ.tensors[l] = B
-
         @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
         push!(R_exs, R_ex)
 
@@ -112,8 +111,13 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) wher
         ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
-
-        if iseigenstate(ϕ, H)
+        
+        eigenstate = try iseigenstate(ϕ, H) catch e;
+            @warn "encountered state with large imaginary component"
+            false
+        end
+            
+        if eigenstate
             quiet || println("Converged in $count iterations")
             converged = true
         elseif count >= maxiter
@@ -124,7 +128,7 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) wher
     ϕ, E₀
 end
 
-function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
+function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-8)
     ϕ = rightcanonical(ψ)
     realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
 end

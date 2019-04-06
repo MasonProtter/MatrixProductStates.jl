@@ -32,7 +32,7 @@ H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
 #+END_SRC
 We can study this Hamiltonian using MatrixProductStates.jl as follows:
 
-We first make a function for generating the Hamiltonian given a coupling strength ~g = h/J~ and a system length ~L~:
+First, make a function for generating the Hamiltonian given a coupling strength ~g = h/J~ and a system length ~L~:
 #+BEGIN_SRC julia
 using MatrixProductStates
 
@@ -50,12 +50,12 @@ function H_TFIM(g, L)
     W_tnsr[3, 2, :, :] = σᶻ   
     W_tnsr[3, 3, :, :] = id   
 
-    return MPO(W_tnsr, L) # MPO will assume that W¹ = W_[end:end, :, :, :] and Wᴸ = W_tnsr[:, 1:1, :, :]
+    return MPO(W_tnsr, L) # MPO will assume that W¹ = W_tnsr[end:end, :, :, :] and Wᴸ = W_tnsr[:, 1:1, :, :]
 end
 #+END_SRC
 
 *** Ground State
-Now suppose we want to know the ground state of this system for
+Suppose we want to know the ground state of this system for
 ~g=0.8~ and ~L=12~ and we have no idea what the MPS form of the ground
 state looks like a-priori.
 #+BEGIN_SRC julia
@@ -252,8 +252,8 @@ A ⊗ B = kron(A, B)
 
 realize(x::Number) = error("Unrecognized numerical type")
 realize(x::Real) = x
-function realize(x::Complex; ϵ=1e-13)
-    abs(imag(x)) < ϵ || error("Non-zero imaginary component")
+function realize(x::Complex; ϵ=1e-10)
+    abs(imag(x)) < ϵ || error("Non-zero imaginary component, $(imag(x))")
     real(x)
 end
 
@@ -522,11 +522,11 @@ Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
 Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
 Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
 
-function Base.show(O::MPO{L, T}) where {L, T}
-    d = length(ψ.tensors[2][1, 1, 1, :])
-    bonddims = [size(ψ[i][:, :, 1, 1]) for i in 1:L]
-    println("Matrix product Operator on $L sites")
-    _show_mpo_dims(L, d, bonddims)
+function Base.show(io::IO, ::MIME"text/plain", O::MPO{L, T}) where {L, T}
+    d = length(O[2][1, 1, 1, :])
+    bonddims = [size(O[i][:, :, 1, 1]) for i in 1:L]
+    println(io, "Matrix product Operator on $L sites")
+    _show_mpo_dims(io, L, d, bonddims)
 end
 
 function _show_mpo_dims(io::IO, L, d, bonddims)
@@ -750,7 +750,7 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         end strided
         h = collect(h)
 
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR, maxiter=1000)
         E = λ[1]::T
         v⁰ = Φ[:,1]::Vector{T}
 
@@ -791,7 +791,7 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
 
         h = collect(h)
 
-        λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+        λ, Φ = eigs(h, v0=v, nev=1, which=:SR, maxiter=1000)
         E = λ[1]::T
         v⁰ = Φ[:,1]::Vector{T}
         @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
@@ -799,7 +799,6 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
         @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
 
         ψ.tensors[l] = B
-
         @tensor R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
         push!(R_exs, R_ex)
 
@@ -828,8 +827,13 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) wher
         ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
-
-        if iseigenstate(ϕ, H)
+        
+        eigenstate = try iseigenstate(ϕ, H) catch e;
+            @warn "encountered state with large imaginary component"
+            false
+        end
+            
+        if eigenstate
             quiet || println("Converged in $count iterations")
             converged = true
         elseif count >= maxiter
@@ -840,7 +844,7 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) wher
     ϕ, E₀
 end
 
-function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-5)
+function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-8)
     ϕ = rightcanonical(ψ)
     realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
 end

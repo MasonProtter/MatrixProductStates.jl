@@ -14,8 +14,8 @@ function _MPO_handed_time_evolver(hs::Vector{Matrix{T}}, τ, L, d) where {T}
         U, S, V = svd(P)
 
         @cast U[1, k, σⁱ, σⁱ′]     := U[(σⁱ, σⁱ′), k] * √(S[k])      (σⁱ:d)
-        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
-        push!(tensors, U, Ū)
+        @cast Ū[k, 1, σⁱ⁺¹, σⁱ⁺¹′] := √(S[k]) * V'[k, (σⁱ⁺¹, σⁱ⁺¹′)] (σⁱ⁺¹:d)
+        push!(tensors, U, Ū)
     end
     MPO{L, T}(tensors)
 end

@@ -59,7 +59,7 @@ follows:
 
 returning 
  
-    Ĥ::MPO = Ŵ¹ Ŵ² Ŵ³ ⋅⋅⋅ Ŵᴸ⁻¹ Wᴸ
+    Ĥ::MPO = Ŵ¹ Ŵ² Ŵ³ ⋅⋅⋅ Ŵᴸ⁻¹ Wᴸ
 """
 function MPO(W::Array{T,4}, L) where {T}
     L >= 2 || throw(DomainError(L, "At least 2 sites."))
@@ -79,11 +79,11 @@ Base.:(==)(O::MPO, U::MPO) = O.tensors == U.tensors
 Base.:(≈)(O::MPO, U::MPO)  = O.tensors ≈ U.tensors
 Base.getindex(O::MPO, args...) = getindex(O.tensors, args...)
 
-function Base.show(O::MPO{L, T}) where {L, T}
-    d = length(ψ.tensors[2][1, 1, 1, :])
-    bonddims = [size(ψ[i][:, :, 1, 1]) for i in 1:L]
-    println("Matrix product Operator on $L sites")
-    _show_mpo_dims(L, d, bonddims)
+function Base.show(io::IO, ::MIME"text/plain", O::MPO{L, T}) where {L, T}
+    d = length(O[2][1, 1, 1, :])
+    bonddims = [size(O[i][:, :, 1, 1]) for i in 1:L]
+    println(io, "Matrix product Operator on $L sites")
+    _show_mpo_dims(io, L, d, bonddims)
 end
 
 function _show_mpo_dims(io::IO, L, d, bonddims)

@@ -17,8 +17,8 @@ A ⊗ B = kron(A, B)
 
 realize(x::Number) = error("Unrecognized numerical type")
 realize(x::Real) = x
-function realize(x::Complex; ϵ=1e-13)
-    abs(imag(x)) < ϵ || error("Non-zero imaginary component")
+function realize(x::Complex; ϵ=1e-10)
+    abs(imag(x)) < ϵ || error("Non-zero imaginary component, $(imag(x))")
     real(x)
 end
 
