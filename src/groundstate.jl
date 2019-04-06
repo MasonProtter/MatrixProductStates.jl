@@ -3,14 +3,6 @@
 # #+HTML: <p>
 
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Iterative%20Ground%20State%20Search][Iterative Ground State Search:1]]
-function iterate_R_ex(B::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
-    @tensor R_ex′[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
-end
-
-function iterate_L_ex(A::Array{T, 3}, W::Array{T, 4}, L_ex::Array{T, 3}) where {T}
-    @tensor L_ex′[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
-end
-
 function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
     R_exs = Array{T, 3}[]
     R_ex = ones(T, 1, 1, 1)
@@ -19,20 +11,6 @@ function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
         push!(R_exs, R_ex)
     end
     reverse(R_exs)
-end
-
-function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
-    @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
-
-    @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
-        L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
-    end strided 
-    h = collect(h)
-
-    λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
-    E  = λ[1]::T 
-    v⁰ = (Φ[:,1])::Vector{T}
-    E, split_tensor(dir, v⁰, size(M))...
 end
 
 function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
@@ -56,12 +34,6 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
     ψ, L_exs, E
 end
 
-function split_tensor(::Right, v⁰::Vector, (Dˡ⁻¹, Dˡ, d))
-    @cast Mm[(σˡ, aˡ⁻¹), aˡ] := v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
-    U, S, V = svd(Mm)
-    @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
-    A, Diagonal(S)*V'
-end
 
 function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     R_exs = Array{T, 3}[]
@@ -84,12 +56,49 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     ψ, R_exs, E
 end
 
+function h_matrix(L_ex::Array{T,3}, W::Array{T,4}, R_ex::Array{T,3}) where {T}
+    @tensor h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′] := L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+    @cast h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′]
+end
+    
+function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
+    @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
+
+    # @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
+    #     L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+    # end strided
+    
+    h = h_matrix(L_ex, W, R_ex)#collect(h)
+
+    λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+    E  = λ[1]::T 
+    v⁰ = (Φ[:,1])::Vector{T}
+    E, split_tensor(dir, v⁰, size(M))...
+end
+
+function split_tensor(::Right, v⁰::Vector, (Dˡ⁻¹, Dˡ, d))
+    @cast Mm[(σˡ, aˡ⁻¹), aˡ] := v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
+    U, S, V = svd(Mm)
+    @cast A[aˡ⁻¹, aˡ, σˡ] |= U[(σˡ, aˡ⁻¹), aˡ] (σˡ:d, aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ)
+    A, Diagonal(S)*V'
+end
+
 function split_tensor(::Left, v⁰::Vector, (Dˡ⁻¹, Dˡ, d))
     @cast Mm[aˡ⁻¹, (σˡ, aˡ)] |= v⁰[(σˡ, aˡ⁻¹, aˡ)] (aˡ⁻¹:Dˡ⁻¹, aˡ:Dˡ, σˡ:d)
     U, S, V = svd(Mm)
     @cast B[aˡ⁻¹, aˡ, σˡ] |= V'[aˡ⁻¹, (σˡ, aˡ)] (σˡ:d)
     U*Diagonal(S), B
 end
+
+function iterate_R_ex(B::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
+    @tensor R_ex′[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+end
+
+function iterate_L_ex(A::Array{T, 3}, W::Array{T, 4}, L_ex::Array{T, 3}) where {T}
+    @tensor L_ex′[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+end
+
+
 
 function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) where {L, T}
     ϕ = ψ |> copy
