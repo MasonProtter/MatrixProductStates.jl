@@ -737,10 +737,9 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         W  = H[l]
         
         E, A, SVp = eigenproblem(right, ψ[l], L_ex, W, R_exs[l])
-
         ψ.tensors[l] = A
-        L_ex = iterate_L_ex(A, W, L_ex)
 
+        L_ex = iterate_L_ex(A, W, L_ex)
         push!(L_exs, L_ex)
 
         Bp1 = ψ.tensors[l+1]
@@ -756,12 +755,11 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     R_ex  = ones(T, 1, 1, 1)
     E = zero(T)
     for l in L:-1:2
-        #M = ψ[l]
         W = H[l]
 
         E, US, B = eigenproblem(left, ψ[l], L_exs[l-1], W, R_ex)
-
         ψ.tensors[l] = B
+
         R_ex = iterate_R_ex(B, W, R_ex) 
         push!(R_exs, R_ex)
 
@@ -779,12 +777,8 @@ end
     
 function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
     @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
-
-    # @reduce h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= sum(bˡ⁻¹, bˡ) begin
-    #     L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
-    # end strided
     
-    h = h_matrix(L_ex, W, R_ex)#collect(h)
+    h = h_matrix(L_ex, W, R_ex)
 
     λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
     E  = λ[1]::T 
@@ -816,7 +810,7 @@ end
 
 
 
-function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) where {L, T}
+function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1e-8) where {L, T}
     ϕ = ψ |> copy
     
     quiet || println("Computing R expressions")
@@ -833,7 +827,7 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=40, quiet=false) wher
         ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
-        if iseigenstate(ϕ, H)
+        if iseigenstate(ϕ, H, ϵ=ϵ)
             quiet || println("Converged in $count iterations")
             converged = true
         elseif count >= maxiter
@@ -846,7 +840,7 @@ end
 
 function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-8)
     ϕ = rightcanonical(ψ)
-    realize(ϕ' * (H * H * ϕ) - (ϕ' * (H * ϕ))^2) < ϵ
+    isapprox(ϕ' * (H * H * ϕ), (ϕ' * (H * ϕ))^2, rtol=ϵ)
 end
 
 #+END_SRC
