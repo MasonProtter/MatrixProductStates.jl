@@ -9,9 +9,6 @@ To acquire this package, simply open a ~julia~ repl and type
 #+BEGIN_SRC
 ] add https://github.com/MasonProtter/MatrixProductStates.jl.git
 #+END_SRC
-Note: Some "errors" may be shown when one types ~using
-MatrixProductStates~ related to ~Strided.jl~. These can be ignored, but if they bother you, just do
-~] add TensorCast#master~.
 
 ** Example: Transverse Field Ising Model 
 #+HTML: <details><summary>Click me!</summary>
@@ -27,7 +24,7 @@ which in MPO form can be written as
 #+BEGIN_SRC 
 H = W¹ W² W³... Wᴸ⁻¹ Wᴸ
                    [ 𝟙    𝟘    𝟘] [ 𝟙    𝟘    𝟘]     [ 𝟙    𝟘    𝟘] [ 𝟙  ]
-  = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘   𝟘|  |-σᶻ |
+  = [-gσˣ  σᶻ   𝟙] | -σᶻ  𝟘    𝟘| | -σᶻ  𝟘    𝟘| ... | -σᶻ  𝟘    𝟘| |-σᶻ |
                    [-gσˣ  σᶻ   𝟙] [-gσˣ  σᶻ   𝟙]     [-gσˣ  σᶻ  𝟙] [-gσˣ]
 #+END_SRC
 We can study this Hamiltonian using MatrixProductStates.jl as follows:
