@@ -769,6 +769,7 @@ end
 
 function h_matrix(L_ex::Array{T,3}, W::Array{T,4}, R_ex::Array{T,3}) where {T}
     @tensor h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′] := L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+    @show size(h)
     @cast h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′]
 end
     
@@ -797,16 +798,31 @@ function split_tensor(::Left, v⁰::Vector, (Dˡ⁻¹, Dˡ, d))
     U*Diagonal(S), B
 end
 
-function iterate_R_ex(B::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
-    @tensor R_ex′[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+function iterate_R_ex(B, W, R_ex) where {T}
+    @tensoropt R_ex′[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
 end
 
-function iterate_L_ex(A::Array{T, 3}, W::Array{T, 4}, L_ex::Array{T, 3}) where {T}
-    @tensor L_ex′[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
+function iterate_L_ex(A, W, L_ex) where {T}
+    @tensoropt L_ex′[bˡ, aˡ, aˡ′] := L_ex[bˡ⁻¹,aˡ⁻¹,aˡ⁻¹′] * (conj.(A))[aˡ⁻¹,aˡ,σˡ] * W[bˡ⁻¹,bˡ,σˡ,σˡ′] * A[aˡ⁻¹′,aˡ′,σˡ′]
 end
 
 
+"""
+    ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1e-8) where {L, T}
 
+Perform the finite system density matrix renormalization group
+algorithm. First this will build up the R expressions, then do right
+and left sweeps until either
+ 1) The state converges to an eigenstate `ϕ` such that
+    ϕ' * H * H * ϕ ≈ (ϕ' * H * ϕ) 
+to the requested tolerance `ϵ`
+ 2) The energy eigenvalue stops changing (possible signaling the algorithm is 
+stuck in a local minimum)
+ 3) The number of full (right and left) sweeps exceeds `maxiter`. 
+
+Setting `quiet=true` will suppress notifications about the algorithm's
+progress but *not* warnings due to non-convergence.
+"""
 function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1e-8) where {L, T}
     ϕ = ψ |> copy
     
@@ -816,24 +832,34 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1
     converged = false
     count     = 0
     E₀ = zero(T)
+    enable_cache(maxsize=5*10^9)
     while not(converged)
         quiet || println("Performing right sweep")
-        ϕ, L_exs, _ = sweep!(right, ϕ, H, R_exs)
+        ϕ, L_exs, E₀ = sweep!(right, ϕ, H, R_exs)
 
         quiet || println("Performing left sweep")
-        ϕ, R_exs, E₀ = sweep!(left,  ϕ, H, L_exs)
+        ϕ, R_exs, E₀′ = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
         if iseigenstate(ϕ, H, ϵ=ϵ)
             quiet || println("Converged in $count iterations")
             converged = true
+        elseif E₀ ≈ E₀′
+                @warn """
+Energy eigenvalue converged but state is not an eigenstate.
+Consider either lowering your requested tolerance or 
+implementing a warm-up algorithm to avoid local minima.
+"""
+            break
         elseif count >= maxiter
             @warn "Did not converge in $maxiter iterations"
             break
         end
     end
+    clear_cache()
     ϕ, E₀
 end
+
 
 function iseigenstate(ψ::MPS, H::MPO; ϵ=1e-8)
     ϕ = rightcanonical(ψ)
