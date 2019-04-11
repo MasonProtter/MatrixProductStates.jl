@@ -829,7 +829,6 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1
     quiet || println("Computing R expressions")
 
     R_exs = R_exprs(ψ, H)
-    L_exs = copy.(reverse(R_exs))
 
     converged = false
     count     = 0
