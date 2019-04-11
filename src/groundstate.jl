@@ -7,7 +7,9 @@ function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
     R_exs = Array{T, 3}[]
     R_ex = ones(T, 1, 1, 1)
     for i in L:-1:2
-        R_ex = iterate_R_ex(ψ[i], H[i], R_ex) 
+        B = ψ[i]
+        W = H[i]
+        @tensoropt R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
         push!(R_exs, R_ex)
     end
     reverse(R_exs)
@@ -18,7 +20,7 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
     L_ex  = ones(T, 1, 1, 1)
     E = zero(T)
     for l in 1:(L-1)
-        W  = H[l]
+        W = H[l]
         
         E, A, SVp = eigenproblem(right, ψ[l], L_ex, W, R_exs[l])
         ψ.tensors[l] = A
@@ -30,9 +32,8 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
         @tensor Mp1[sⁱ⁻¹, aⁱ, σⁱ] := SVp[sⁱ⁻¹, aⁱ⁻¹] * Bp1[aⁱ⁻¹, aⁱ, σⁱ]
         ψ.tensors[l+1] = Mp1
     end
-    ψ, L_exs, E
+    L_exs, E
 end
-
 
 function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     R_exs = Array{T, 3}[]
@@ -51,14 +52,14 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
         @tensor Mm1[aˡ⁻², sˡ⁻¹, σˡ⁻¹] :=  Am1[aˡ⁻², aˡ⁻¹′, σˡ⁻¹] * US[aˡ⁻¹′, sˡ⁻¹]
         ψ.tensors[l-1] = Mm1
     end
-    ψ, R_exs, E
+    R_exs, E
 end
 
 function h_matrix(L_ex::Array{T,3}, W::Array{T,4}, R_ex::Array{T,3}) where {T}
     @tensor h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′] := L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
     @cast h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′]
 end
-    
+
 function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
     @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
     
@@ -67,7 +68,8 @@ function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Arra
     λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
     E  = λ[1]::T 
     v⁰ = (Φ[:,1])::Vector{T}
-    E, split_tensor(dir, v⁰, size(M))...
+
+    (E, split_tensor(dir, v⁰, size(M))...)
 end
 
 function split_tensor(::Right, v⁰::Vector, (Dˡ⁻¹, Dˡ, d))
@@ -115,16 +117,18 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1
     quiet || println("Computing R expressions")
 
     R_exs = R_exprs(ψ, H)
+    L_exs = copy.(reverse(R_exs))
+
     converged = false
     count     = 0
     E₀ = zero(T)
     enable_cache(maxsize=5*10^9)
     while not(converged)
         quiet || println("Performing right sweep")
-        ϕ, L_exs, E₀ = sweep!(right, ϕ, H, R_exs)
+        L_exs, E₀′ = sweep!(right, ϕ, H, R_exs)
 
         quiet || println("Performing left sweep")
-        ϕ, R_exs, E₀′ = sweep!(left,  ϕ, H, L_exs)
+        R_exs, E₀  = sweep!(left,  ϕ, H, L_exs)
 
         count += 1
         if iseigenstate(ϕ, H, ϵ=ϵ)

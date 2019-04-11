@@ -36,7 +36,7 @@ Base.getindex(ψ::MPS, i::Int) = getindex(ψ.tensors, i)
 Base.:(*)(ψ::MPS{L, T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors .* x)
 Base.:(*)(x::Number, ψ::MPS) = ψ * x
 Base.:(/)(ψ::MPS{L,T}, x::Number) where {L, T} = MPS{L,T}(ψ.tensors ./ x)
-Base.copy(ψ::MPS{L, T}) where {L, T} = MPS{L,T}(copy(ψ.tensors))
+Base.copy(ψ::MPS{L, T}) where {L, T} = MPS{L,T}(copy.(ψ.tensors))
 
 function Base.randn(::Type{MPS{L, T}}, D::Int, d::Int) where {L, T}
     tensors = [randn(1, D, d), [randn(D, D, d) for _ in 2:(L-1)]..., randn(D, 1, d)]
