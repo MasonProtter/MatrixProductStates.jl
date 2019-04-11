@@ -5,7 +5,7 @@
 # [[file:~/.julia/dev/MatrixProductStates/README.org::*Module%20Definition][Module Definition:1]]
 module MatrixProductStates
 
-using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Strided
+using LinearAlgebra, TensorOperations, TensorCast, LowRankApprox, Arpack, Strided, SparseArrays
 #using ProgressMeter
 
 export *, /, ==, ≈, isequal, adjoint, getindex, randn
@@ -20,7 +20,6 @@ include("contraction.jl")
 include("groundstate.jl")
 include("correlation.jl")
 include("timeevolution.jl")
-
 
 end
 # Module Definition:1 ends here
