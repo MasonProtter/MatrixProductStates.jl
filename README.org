@@ -718,23 +718,29 @@ compress(ψ; Dcut) = compress(ψ, left, Dcut=Dcut)[1]
 function R_exprs(ψ::MPS{L, T}, H::MPO{L, T}) where {L, T}
     R_exs = Array{T, 3}[]
     R_ex = ones(T, 1, 1, 1)
-    for i in L:-1:2
-        B = ψ[i]
-        W = H[i]
-        @tensoropt R_ex[bⁱ⁻¹, aⁱ⁻¹, aⁱ⁻¹′] := (conj.(B))[aⁱ⁻¹,aⁱ,σⁱ] * W[bⁱ⁻¹,bⁱ,σⁱ,σⁱ′] * B[aⁱ⁻¹′,aⁱ′,σⁱ′] * R_ex[bⁱ,aⁱ,aⁱ′]
+    for l in L:-1:2
+        R_ex = iterate_R_ex(ψ[l], H[l], R_ex) 
         push!(R_exs, R_ex)
     end
     reverse(R_exs)
 end
 
-function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
+function preallocate_hs(ψ::MPS{L, T}) where {L, T}
+    h_tnsrs = map(ψ.tensors) do M
+        Dˡ⁻¹, Dˡ, d = size(M)
+        Array{T, 6}(undef, d, Dˡ⁻¹, Dˡ, d, Dˡ⁻¹, Dˡ)
+    end
+end
+
+
+function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs, hs) where {L, T}
     L_exs = Array{T, 3}[]
     L_ex  = ones(T, 1, 1, 1)
     E = zero(T)
     for l in 1:(L-1)
         W = H[l]
         
-        E, A, SVp = eigenproblem(right, ψ[l], L_ex, W, R_exs[l])
+        E, A, SVp = eigenproblem(right, ψ[l], L_ex, W, R_exs[l], hs[l])
         ψ.tensors[l] = A
 
         L_ex = iterate_L_ex(A, W, L_ex)
@@ -747,14 +753,14 @@ function sweep!(::Right, ψ::MPS{L, T}, H::MPO{L, T}, R_exs) where {L, T}
     L_exs, E
 end
 
-function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
+function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs, hs) where {L, T}
     R_exs = Array{T, 3}[]
     R_ex  = ones(T, 1, 1, 1)
     E = zero(T)
     for l in L:-1:2
         W = H[l]
 
-        E, US, B = eigenproblem(left, ψ[l], L_exs[l-1], W, R_ex)
+        E, US, B = eigenproblem(left, ψ[l], L_exs[l-1], W, R_ex, hs[l])
         ψ.tensors[l] = B
 
         R_ex = iterate_R_ex(B, W, R_ex) 
@@ -767,17 +773,17 @@ function sweep!(::Left, ψ::MPS{L, T}, H::MPO{L, T}, L_exs) where {L, T}
     R_exs, E
 end
 
-function h_matrix(L_ex::Array{T,3}, W::Array{T,4}, R_ex::Array{T,3}) where {T}
-    @tensor h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′] := L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
-    @cast h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] |= h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′]
+function h_matrix!(L_ex::Array{T,3}, W::Array{T,4}, R_ex::Array{T,3}, h) where {T}
+    @tensor h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′] = L_ex[bˡ⁻¹, aˡ⁻¹, aˡ⁻¹′] * W[bˡ⁻¹, bˡ, σˡ, σˡ′] * R_ex[bˡ, aˡ, aˡ′]
+    @cast h[(σˡ, aˡ⁻¹, aˡ), (σˡ′, aˡ⁻¹′, aˡ′)] := h[σˡ, aˡ⁻¹, aˡ, σˡ′, aˡ⁻¹′, aˡ′]
 end
 
-function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}) where {T}
+function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Array{T, 4}, R_ex::Array{T, 3}, h) where {T}
     @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
     
-    h = h_matrix(L_ex, W, R_ex)
-
-    λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
+    h = h_matrix!(L_ex, W, R_ex, h)
+    λ, Φ, _, niter = eigs(h, v0=v, nev=1, which=:SR)
+    @show niter
     E  = λ[1]::T 
     v⁰ = (Φ[:,1])::Vector{T}
 
@@ -825,9 +831,11 @@ progress but *not* warnings due to non-convergence.
 """
 function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1e-8) where {L, T}
     ϕ = ψ |> copy
+    quiet || println("Preallocating arrays")
     
-    quiet || println("Computing R expressions")
+    hs = preallocate_hs(ψ)
 
+    quiet || println("Computing R expressions")
     R_exs = R_exprs(ψ, H)
 
     converged = false
@@ -836,16 +844,16 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1
     enable_cache(maxsize=5*10^9)
     while not(converged)
         quiet || println("Performing right sweep")
-        L_exs, E₀′ = sweep!(right, ϕ, H, R_exs)
+        L_exs, E₀′ = sweep!(right, ϕ, H, R_exs, hs)
 
         quiet || println("Performing left sweep")
-        R_exs, E₀  = sweep!(left,  ϕ, H, L_exs)
+        R_exs, E₀  = sweep!(left,  ϕ, H, L_exs, hs)
 
         count += 1
         if iseigenstate(ϕ, H, ϵ=ϵ)
             quiet || println("Converged in $count iterations")
             converged = true
-        elseif E₀ ≈ E₀′
+        elseif  count > 1 E₀ ≈ E₀′
                 @warn """
 Energy eigenvalue converged but state is not an eigenstate.
 Consider either lowering your requested tolerance or 
