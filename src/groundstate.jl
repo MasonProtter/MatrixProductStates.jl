@@ -140,7 +140,7 @@ function ground_state(ψ::MPS{L, T}, H::MPO{L, T}; maxiter=10, quiet=false, ϵ=1
         if iseigenstate(ϕ, H, ϵ=ϵ)
             quiet || println("Converged in $count iterations")
             converged = true
-        elseif  count > 1 E₀ ≈ E₀′
+        elseif count > 1 && E₀ ≈ E₀′
                 @warn """
 Energy eigenvalue converged but state is not an eigenstate.
 Consider either lowering your requested tolerance or 
