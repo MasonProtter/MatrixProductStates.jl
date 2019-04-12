@@ -782,8 +782,7 @@ function eigenproblem(dir::Direction, M::Array{T, 3}, L_ex::Array{T, 3}, W::Arra
     @cast v[(σˡ, aˡ⁻¹, aˡ)] |= M[aˡ⁻¹, aˡ, σˡ]
     
     h = h_matrix!(L_ex, W, R_ex, h)
-    λ, Φ, _, niter = eigs(h, v0=v, nev=1, which=:SR)
-    @show niter
+    λ, Φ = eigs(h, v0=v, nev=1, which=:SR)
     E  = λ[1]::T 
     v⁰ = (Φ[:,1])::Vector{T}
 
