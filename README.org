@@ -3,11 +3,14 @@
 This is a package-in-progress in which I am implementing the [[https://en.wikipedia.org/wiki/Density_matrix_renormalization_group][DMRG]]
 algorithm over matrix product states as explained in Schollwöck's [[https://www.sciencedirect.com/science/article/pii/S0003491610001752][The
 density-matrix renormalization group in the age of matrix product
-states]]. A similar project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]]. 
+states]]. A similar project has been undertaken in [[https://github.com/0/LatticeSweeper.jl][LatticeSweeper.jl]].
 
-To acquire this package, simply open a ~julia~ repl and type 
-#+BEGIN_SRC
-] add https://github.com/MasonProtter/MatrixProductStates.jl.git
+I'm not longer actively developthing this library, but I think it still has value as an educational resource for those wanting to learn DMRG.
+Julia made it possible for me to implement this package using syntax which is very close to the math written in the online literature.
+
+To acquire this package, simply open a ~julia~ repl (obtained from https://julialang.org/downloads/) and type
+#+BEGIN_SRC julia
+using Pkg; Pkg.add("https://github.com/MasonProtter/MatrixProductStates.jl.git")
 #+END_SRC
 
 ** Example: Transverse Field Ising Model 
@@ -202,8 +205,8 @@ lineplot(js, realize.(ordered_zzs), canvas=DotCanvas, ylim=[0, 1.01], width=80, 
 
 
 ** Source Code
-This readme is a literate document containing all of the source and
-test code for the package.
+This readme is a literate document containing all of the source and test code for the package. Check it out, I think it's surprisingly legible. The sections MPS, MPO, compression, contraction, groundstate, and correlation are based directly on the math written in Schollwöck's review.
+
 *** Module Definition
 #+HTML: <details><summary>Source</summary>
 #+HTML: <p>
