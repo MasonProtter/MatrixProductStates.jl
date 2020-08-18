@@ -205,7 +205,9 @@ lineplot(js, realize.(ordered_zzs), canvas=DotCanvas, ylim=[0, 1.01], width=80, 
 
 
 ** Source Code
-This readme is a literate document containing all of the source and test code for the package. Check it out, I think it's surprisingly legible. The sections MPS, MPO, compression, contraction, groundstate, and correlation are based directly on the math written in Schollwöck's review.
+This readme is a literate document containing all of the source and test code for the package. Check it out, I think it's surprisingly legible. 
+The sections Matrix Product States, Matrix Product Operatiors, Compression and Iterative Ground State Search are based directly on the math 
+written in Schollwöck's review.
 
 *** Module Definition
 #+HTML: <details><summary>Source</summary>
