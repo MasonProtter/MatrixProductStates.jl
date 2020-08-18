@@ -67,10 +67,10 @@ Dcut = 100; # This is the maximum bond dimension we'll allow our matrix product 
 H = H_TFIM(g, L)
 ψ = randn(MPS{L, Complex{Float64}}, Dcut, d) # Generate a completely randomized matrix product state
 
-ϕ, Eₒ = ground_state(ψ, H, quiet=true) #Set quiet to false (the deault) to turn off notifications about the algorithm's progress
+ϕ, E₀ = ground_state(ψ, H, quiet=true) #Set quiet to false (the deault) to turn off notifications about the algorithm's progress
 #+END_SRC
 We now have the ground state ~ϕ~, and an estimate of it's energy
-eigenvalue ~Eₒ~!
+eigenvalue ~E₀~!
 
 Note that 12 sites can be easily studied with far less computational
 cost as an exact diagonalization, but I didn't want to suggest doing
